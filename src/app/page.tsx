@@ -7,6 +7,9 @@ import {
   type CostConfig,
   type EstimateResult,
   type FeasibilityItem,
+  type ScenarioResult,
+  type AccessLevel,
+  type InspectionMethod,
   DEFAULT_CONFIG,
   PRESETS,
   createDefaultFace,
@@ -22,6 +25,18 @@ function yen(n: number): string {
 function pct(n: number): string {
   return n.toFixed(1) + "%";
 }
+
+const ACCESS_LABELS: Record<AccessLevel, { symbol: string; label: string; color: string; bg: string }> = {
+  "free-drone": { symbol: "○", label: "フリードローン可", color: "text-green-600", bg: "bg-green-50 border-green-300" },
+  "line-drone": { symbol: "△", label: "ラインドローン使用で可", color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-300" },
+  "no-drone": { symbol: "×", label: "ドローン不可", color: "text-red-600", bg: "bg-red-50 border-red-300" },
+};
+
+const METHOD_LABELS: Record<InspectionMethod, string> = {
+  infrared: "赤外線",
+  percussion: "打診",
+  visual: "目視",
+};
 
 // --- Components ---
 
@@ -76,11 +91,7 @@ function StatCard({
   );
 }
 
-function ComparisonBar({
-  result,
-}: {
-  result: EstimateResult;
-}) {
+function ComparisonBar({ result }: { result: EstimateResult }) {
   const maxVal = Math.max(
     result.comparison.dronePrice,
     result.comparison.ropeAccessPrice,
@@ -93,7 +104,7 @@ function ComparisonBar({
     <div className="space-y-3">
       <div>
         <div className="flex justify-between text-sm mb-1">
-          <span>ドローン調査</span>
+          <span>ドローン調査（提案価格）</span>
           <span className="font-bold">{yen(result.comparison.dronePrice)}</span>
         </div>
         <div className="w-full bg-gray-100 rounded-full h-6 overflow-hidden">
@@ -105,7 +116,7 @@ function ComparisonBar({
       </div>
       <div>
         <div className="flex justify-between text-sm mb-1">
-          <span>ロープアクセス</span>
+          <span>ロープアクセス（全面）</span>
           <span className="font-bold">
             {yen(result.comparison.ropeAccessPrice)}
           </span>
@@ -130,82 +141,120 @@ function ComparisonBar({
   );
 }
 
-function CostTable({ result }: { result: EstimateResult }) {
-  const rows = [
-    { label: "人件費", value: result.costBreakdown.personnel },
-    { label: "機材費", value: result.costBreakdown.equipment },
-    { label: "赤外線解析費", value: result.costBreakdown.irAnalysis },
-    { label: "交通費", value: result.costBreakdown.transportation },
-    {
-      label: "直接原価 小計",
-      value: result.costBreakdown.directCost,
-      bold: true,
-    },
-    { label: "一般管理費", value: result.costBreakdown.adminCost },
-    { label: "原価合計", value: result.costBreakdown.totalCost, bold: true },
-  ];
+// --- Scenario Card (Left=原価, Right=見積もり) ---
 
+function ScenarioCard({ scenario, label }: { scenario: ScenarioResult; label: string }) {
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-border">
-          <th className="text-left py-2 font-medium text-text-secondary">
-            項目
-          </th>
-          <th className="text-right py-2 font-medium text-text-secondary">
-            金額
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr
-            key={i}
-            className={`border-b border-border ${r.bold ? "bg-gray-50" : ""}`}
-          >
-            <td className={`py-2 ${r.bold ? "font-bold" : ""}`}>{r.label}</td>
-            <td className={`py-2 text-right ${r.bold ? "font-bold" : ""}`}>
-              {yen(r.value)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="bg-white rounded-lg border border-border p-4">
+      <h3 className="text-sm font-bold text-text-secondary mb-3">{label}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Left: 原価内訳 */}
+        <div>
+          <h4 className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">
+            原価内訳
+          </h4>
+          <table className="w-full text-sm">
+            <tbody>
+              <CostRow label="人件費" value={scenario.costBreakdown.personnel} />
+              <CostRow label="機材費" value={scenario.costBreakdown.equipment} />
+              <CostRow label="赤外線解析費" value={scenario.costBreakdown.irAnalysis} />
+              <CostRow label="交通費" value={scenario.costBreakdown.transportation} />
+              <CostRow label="ロープアクセス外注" value={scenario.costBreakdown.ropeAccessSubcontract} />
+              <CostRow label="直接原価 小計" value={scenario.costBreakdown.directCost} bold />
+              <CostRow label="一般管理費" value={scenario.costBreakdown.adminCost} />
+              <CostRow label="原価合計" value={scenario.costBreakdown.totalCost} bold />
+            </tbody>
+          </table>
+        </div>
+
+        {/* Right: お客様向け見積もり */}
+        <div>
+          <h4 className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">
+            お客様向け見積もり
+          </h4>
+          <table className="w-full text-sm">
+            <tbody>
+              {scenario.customerEstimate.freeDroneIRFee > 0 && (
+                <CostRow label="フリードローン赤外線" value={scenario.customerEstimate.freeDroneIRFee} />
+              )}
+              {scenario.customerEstimate.lineDroneIRFee > 0 && (
+                <CostRow label="ラインドローン赤外線" value={scenario.customerEstimate.lineDroneIRFee} />
+              )}
+              {scenario.customerEstimate.groundIRFee > 0 && (
+                <CostRow label="地上赤外線" value={scenario.customerEstimate.groundIRFee} />
+              )}
+              {scenario.customerEstimate.ropePercussionFee > 0 && (
+                <CostRow label="ロープアクセス打診" value={scenario.customerEstimate.ropePercussionFee} />
+              )}
+              <CostRow label="見積もり合計" value={scenario.customerEstimate.totalEstimate} bold />
+            </tbody>
+          </table>
+
+          {/* Profit summary */}
+          <div className="mt-3 pt-3 border-t border-border">
+            <div className="flex justify-between text-sm">
+              <span>粗利</span>
+              <span className={`font-bold ${scenario.profit >= 0 ? "text-positive" : "text-negative"}`}>
+                {yen(scenario.profit)}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm mt-1">
+              <span>粗利率</span>
+              <span className={`font-bold ${scenario.profitRate >= 0 ? "text-positive" : "text-negative"}`}>
+                {pct(scenario.profitRate)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function PerM2Table({ result }: { result: EstimateResult }) {
+function CostRow({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-border">
-          <th className="text-left py-2 font-medium text-text-secondary">
-            m2単価
-          </th>
-          <th className="text-right py-2 font-medium text-text-secondary">
-            金額
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr className="border-b border-border">
-          <td className="py-2">販売単価</td>
-          <td className="py-2 text-right">{result.perM2.sales} 円/m2</td>
-        </tr>
-        <tr className="border-b border-border">
-          <td className="py-2">原価単価</td>
-          <td className="py-2 text-right">{result.perM2.cost} 円/m2</td>
-        </tr>
-        <tr className="border-b border-border bg-gray-50">
-          <td className="py-2 font-bold">利益単価</td>
-          <td
-            className={`py-2 text-right font-bold ${result.perM2.profit >= 0 ? "text-positive" : "text-negative"}`}
-          >
-            {result.perM2.profit} 円/m2
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <tr className={`border-b border-border ${bold ? "bg-gray-50" : ""}`}>
+      <td className={`py-1.5 ${bold ? "font-bold" : ""}`}>{label}</td>
+      <td className={`py-1.5 text-right ${bold ? "font-bold" : ""}`}>{yen(value)}</td>
+    </tr>
+  );
+}
+
+// --- Face Summary Table ---
+
+function FaceSummaryTable({ result }: { result: EstimateResult }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b-2 border-border">
+            <th className="text-left py-2 font-medium text-text-secondary">面</th>
+            <th className="text-center py-2 font-medium text-text-secondary">判定</th>
+            <th className="text-left py-2 font-medium text-text-secondary">手法</th>
+            <th className="text-right py-2 font-medium text-text-secondary">面積</th>
+            <th className="text-left py-2 font-medium text-text-secondary pl-3">注記</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.faceResults.map((fr, i) => {
+            const access = ACCESS_LABELS[fr.accessLevel];
+            return (
+              <tr key={i} className="border-b border-border">
+                <td className="py-2 font-medium">{fr.name}</td>
+                <td className="py-2 text-center">
+                  <span className={`text-lg font-bold ${access.color}`}>
+                    {access.symbol}
+                  </span>
+                </td>
+                <td className="py-2">{METHOD_LABELS[fr.inspectionMethod]}</td>
+                <td className="py-2 text-right">{fr.area.toLocaleString()} m2</td>
+                <td className="py-2 text-text-muted pl-3">{fr.note || "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -226,15 +275,22 @@ function FaceEditor({
     onChange(index, { ...face, ...patch });
   };
 
+  const access = ACCESS_LABELS[face.accessLevel];
+
   return (
-    <div className="border border-border rounded-lg p-3 bg-white">
+    <div className={`border rounded-lg p-3 ${access.bg}`}>
       <div className="flex justify-between items-center mb-2">
-        <input
-          type="text"
-          value={face.name}
-          onChange={(e) => update({ name: e.target.value })}
-          className="font-bold text-sm bg-transparent border-b border-transparent hover:border-border focus:border-accent focus:outline-none px-1 py-0.5"
-        />
+        <div className="flex items-center gap-2">
+          <span className={`text-xl font-bold ${access.color}`}>
+            {access.symbol}
+          </span>
+          <input
+            type="text"
+            value={face.name}
+            onChange={(e) => update({ name: e.target.value })}
+            className="font-bold text-sm bg-transparent border-b border-transparent hover:border-border focus:border-accent focus:outline-none px-1 py-0.5"
+          />
+        </div>
         <button
           onClick={() => onRemove(index)}
           className="text-xs text-text-muted hover:text-negative"
@@ -242,58 +298,117 @@ function FaceEditor({
           削除
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-sm">
+
+      {/* Access Level Radio */}
+      <div className="flex flex-wrap gap-2 mb-2">
+        {(["free-drone", "line-drone", "no-drone"] as AccessLevel[]).map((level) => {
+          const opt = ACCESS_LABELS[level];
+          return (
+            <label
+              key={level}
+              className={`flex items-center gap-1 text-xs cursor-pointer px-2 py-1 rounded border ${
+                face.accessLevel === level
+                  ? `${opt.bg} font-bold`
+                  : "bg-white border-border"
+              }`}
+            >
+              <input
+                type="radio"
+                name={`access-${index}`}
+                checked={face.accessLevel === level}
+                onChange={() => {
+                  const patch: Partial<FaceInput> = { accessLevel: level };
+                  if (level === "no-drone") {
+                    patch.inspectionMethod = "percussion";
+                    patch.ropeAccessArea = face.area;
+                  } else {
+                    patch.inspectionMethod = "infrared";
+                    patch.ropeAccessArea = 0;
+                  }
+                  update(patch);
+                }}
+                className="hidden"
+              />
+              <span className={opt.color}>{opt.symbol}</span> {opt.label}
+            </label>
+          );
+        })}
+      </div>
+
+      {/* Inspection Method + Area */}
+      <div className="grid grid-cols-2 gap-2 text-sm mb-2">
         <div>
           <label className="text-xs text-text-muted">面積 (m2)</label>
           <input
             type="number"
             value={face.area || ""}
-            onChange={(e) => update({ area: Number(e.target.value) || 0 })}
-            className="w-full border border-border rounded px-2 py-1 text-sm"
+            onChange={(e) => {
+              const area = Number(e.target.value) || 0;
+              const patch: Partial<FaceInput> = { area };
+              if (face.accessLevel === "no-drone") {
+                patch.ropeAccessArea = area;
+              }
+              update(patch);
+            }}
+            className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
           />
         </div>
         <div>
-          <label className="text-xs text-text-muted">
-            地上IR面積 (m2)
-          </label>
+          <label className="text-xs text-text-muted">検査方法</label>
+          <select
+            value={face.inspectionMethod}
+            onChange={(e) =>
+              update({ inspectionMethod: e.target.value as InspectionMethod })
+            }
+            className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
+          >
+            <option value="infrared">赤外線</option>
+            <option value="percussion">打診</option>
+            <option value="visual">目視</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Ground IR + Rope Access */}
+      <div className="grid grid-cols-2 gap-2 text-sm mb-2">
+        <div>
+          <label className="text-xs text-text-muted">地上IR面積 (m2)</label>
           <input
             type="number"
             value={face.groundIRArea || ""}
             onChange={(e) =>
               update({ groundIRArea: Number(e.target.value) || 0 })
             }
-            className="w-full border border-border rounded px-2 py-1 text-sm"
+            className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
           />
         </div>
+        {face.accessLevel === "no-drone" && (
+          <div>
+            <label className="text-xs text-text-muted">
+              ロープアクセス面積 (m2)
+            </label>
+            <input
+              type="number"
+              value={face.ropeAccessArea || ""}
+              onChange={(e) =>
+                update({ ropeAccessArea: Number(e.target.value) || 0 })
+              }
+              className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
+            />
+          </div>
+        )}
       </div>
-      <div className="flex flex-wrap gap-3 mt-2 text-xs">
-        <label className="flex items-center gap-1 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={face.droneAccessible}
-            onChange={(e) => update({ droneAccessible: e.target.checked })}
-            className="rounded"
-          />
-          ドローン可
-        </label>
-        <label className="flex items-center gap-1 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={face.lineDroneRequired}
-            onChange={(e) => update({ lineDroneRequired: e.target.checked })}
-            className="rounded"
-          />
-          ラインドローン必要
-        </label>
-        <label className="flex items-center gap-1 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={face.groundIRPossible}
-            onChange={(e) => update({ groundIRPossible: e.target.checked })}
-            className="rounded"
-          />
-          地上IR可
-        </label>
+
+      {/* Note */}
+      <div className="text-sm">
+        <label className="text-xs text-text-muted">注記</label>
+        <input
+          type="text"
+          value={face.note}
+          onChange={(e) => update({ note: e.target.value })}
+          placeholder="例: 大通りに面しているためドローン不可"
+          className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
+        />
       </div>
     </div>
   );
@@ -312,12 +427,6 @@ function ConfigEditor({
 }) {
   const [open, setOpen] = useState(false);
 
-  const updatePersonnel = (key: keyof CostConfig["personnel"], val: number) => {
-    onChange({
-      ...config,
-      personnel: { ...config.personnel, [key]: val },
-    });
-  };
   const updateEquipment = (key: keyof CostConfig["equipment"], val: number) => {
     onChange({
       ...config,
@@ -382,40 +491,21 @@ function ConfigEditor({
 
           <div>
             <h4 className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-              人件費（円/日）
+              人件費
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               <NumField
-                label="パイロット"
-                value={config.personnel.pilot}
-                onChangeVal={(v) => updatePersonnel("pilot", v)}
-                unit="円/日"
-              />
-              <NumField
-                label="補助者"
-                value={config.personnel.observer}
-                onChangeVal={(v) => updatePersonnel("observer", v)}
-                unit="円/日"
-              />
-              <NumField
-                label="安全管理者"
-                value={config.personnel.safetyManager}
-                onChangeVal={(v) => updatePersonnel("safetyManager", v)}
-                unit="円/日"
-              />
-              <NumField
-                label="IR技術者"
-                value={config.personnel.irTechnician}
-                onChangeVal={(v) => updatePersonnel("irTechnician", v)}
-                unit="円/日"
-              />
-              <NumField
-                label="作業員"
-                value={config.personnel.assistant}
-                onChangeVal={(v) => updatePersonnel("assistant", v)}
+                label="チーム合計（5人/日）"
+                value={config.teamCostPerDay}
+                onChangeVal={(v) =>
+                  onChange({ ...config, teamCostPerDay: v })
+                }
                 unit="円/日"
               />
             </div>
+            <p className="text-xs text-text-muted mt-1">
+              内訳目安: パイロット + 補助者 + 安全管理者 + IR技術者 + 作業員 = 5名 x 50,000円
+            </p>
           </div>
 
           <div>
@@ -456,7 +546,7 @@ function ConfigEditor({
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               <NumField
-                label="外注解析"
+                label="外注解析（Sugitec）"
                 value={config.irAnalysis.outsourceCostPerM2}
                 onChangeVal={(v) => updateIR("outsourceCostPerM2", v)}
                 unit="円/m2"
@@ -508,7 +598,7 @@ function ConfigEditor({
                 unit="%"
               />
               <NumField
-                label="販売単価"
+                label="ドローン販売単価"
                 value={config.unitPricePerM2}
                 onChangeVal={(v) =>
                   onChange({ ...config, unitPricePerM2: v })
@@ -516,10 +606,18 @@ function ConfigEditor({
                 unit="円/m2"
               />
               <NumField
-                label="ロープアクセス単価"
+                label="ロープアクセス顧客単価"
                 value={config.ropeAccessPricePerM2}
                 onChangeVal={(v) =>
                   onChange({ ...config, ropeAccessPricePerM2: v })
+                }
+                unit="円/m2"
+              />
+              <NumField
+                label="ロープアクセス下請単価"
+                value={config.ropeAccessPercussionPerM2}
+                onChangeVal={(v) =>
+                  onChange({ ...config, ropeAccessPercussionPerM2: v })
                 }
                 unit="円/m2"
               />
@@ -589,7 +687,10 @@ export default function EstimatePage() {
   const addFace = useCallback(() => {
     setBuilding((prev) => ({
       ...prev,
-      faces: [...prev.faces, createDefaultFace(`面${prev.faces.length + 1}`, 0)],
+      faces: [
+        ...prev.faces,
+        createDefaultFace(`面${prev.faces.length + 1}`, 0),
+      ],
     }));
   }, []);
 
@@ -655,7 +756,7 @@ export default function EstimatePage() {
                     onChange={(e) =>
                       setBuilding({ ...building, name: e.target.value })
                     }
-                    placeholder="例: 〇〇ビルディング"
+                    placeholder="例: 東劇ビル"
                     className="w-full border border-border rounded px-3 py-2 text-sm"
                   />
                 </div>
@@ -705,38 +806,6 @@ export default function EstimatePage() {
                     />
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Survey Settings */}
-            <div className="bg-white rounded-lg border border-border p-4">
-              <h2 className="text-sm font-bold text-text-secondary mb-3">
-                調査設定
-              </h2>
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-text-muted">赤外線解析:</span>
-                <label className="flex items-center gap-1 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="irMode"
-                    checked={config.irAnalysisMode === "internal"}
-                    onChange={() =>
-                      setConfig({ ...config, irAnalysisMode: "internal" })
-                    }
-                  />
-                  自社（{config.irAnalysis.internalCostPerM2}円/m2）
-                </label>
-                <label className="flex items-center gap-1 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="irMode"
-                    checked={config.irAnalysisMode === "outsource"}
-                    onChange={() =>
-                      setConfig({ ...config, irAnalysisMode: "outsource" })
-                    }
-                  />
-                  外注（{config.irAnalysis.outsourceCostPerM2}円/m2）
-                </label>
               </div>
             </div>
 
@@ -797,33 +866,43 @@ export default function EstimatePage() {
               <FeasibilityPanel items={result.feasibility.items} />
             </div>
 
-            {/* Key Metrics */}
+            {/* Face Summary with ○△× */}
+            <div className="bg-white rounded-lg border border-border p-4">
+              <h3 className="text-sm font-bold text-text-secondary mb-3">
+                各面の判定サマリ
+              </h3>
+              <FaceSummaryTable result={result} />
+            </div>
+
+            {/* Key Metrics (Current scenario) */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatCard
-                label="販売価格"
-                value={yen(result.salesPrice)}
-                sub={`${result.perM2.sales} 円/m2`}
+                label="見積もり価格"
+                value={yen(result.current.salesPrice)}
+                sub={`${result.current.perM2.sales} 円/m2`}
                 color="text-primary"
               />
               <StatCard
-                label="原価"
-                value={yen(result.costBreakdown.totalCost)}
-                sub={`${result.perM2.cost} 円/m2`}
+                label="原価（外注時）"
+                value={yen(result.current.costBreakdown.totalCost)}
+                sub={`${result.current.perM2.cost} 円/m2`}
               />
               <StatCard
-                label="粗利"
-                value={yen(result.profit)}
-                sub={`${result.perM2.profit} 円/m2`}
+                label="粗利（外注時）"
+                value={yen(result.current.profit)}
+                sub={`${result.current.perM2.profit} 円/m2`}
                 color={
-                  result.profit >= 0 ? "text-positive" : "text-negative"
+                  result.current.profit >= 0 ? "text-positive" : "text-negative"
                 }
               />
               <StatCard
-                label="粗利率"
-                value={pct(result.profitRate)}
+                label="粗利率（外注時）"
+                value={pct(result.current.profitRate)}
                 sub={`調査日数: ${result.surveyDays}日`}
                 color={
-                  result.profitRate >= 0 ? "text-positive" : "text-negative"
+                  result.current.profitRate >= 0
+                    ? "text-positive"
+                    : "text-negative"
                 }
               />
             </div>
@@ -846,35 +925,50 @@ export default function EstimatePage() {
                     {result.groundIRArea.toLocaleString()} m2
                   </div>
                 </div>
-                <div className="bg-gray-50 rounded p-2">
-                  <div className="text-xs text-text-muted">アクセス不可</div>
-                  <div className="font-bold text-text-muted">
-                    {result.nonAccessibleArea.toLocaleString()} m2
+                <div className="bg-red-50 rounded p-2">
+                  <div className="text-xs text-text-muted">
+                    ロープアクセス
+                  </div>
+                  <div className="font-bold text-negative">
+                    {result.ropeAccessArea.toLocaleString()} m2
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Cost Breakdown */}
-            <div className="bg-white rounded-lg border border-border p-4">
+            {/* Two-Scenario Comparison */}
+            <div>
               <h3 className="text-sm font-bold text-text-secondary mb-3">
-                原価内訳
+                シナリオ比較
               </h3>
-              <CostTable result={result} />
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <ScenarioCard
+                  scenario={result.current}
+                  label="現状（Sugitec外注）"
+                />
+                <ScenarioCard
+                  scenario={result.future}
+                  label="将来（自社化後）"
+                />
+              </div>
+
+              {/* Improvement indicator */}
+              {result.future.profit > result.current.profit && (
+                <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-center">
+                  <span className="font-bold text-positive">
+                    自社化による改善効果:
+                  </span>{" "}
+                  粗利 +{yen(result.future.profit - result.current.profit)}
+                  （粗利率 {pct(result.current.profitRate)} →{" "}
+                  {pct(result.future.profitRate)}）
+                </div>
+              )}
             </div>
 
-            {/* Per m2 */}
+            {/* Comparison with rope access */}
             <div className="bg-white rounded-lg border border-border p-4">
               <h3 className="text-sm font-bold text-text-secondary mb-3">
-                m2単価の内訳
-              </h3>
-              <PerM2Table result={result} />
-            </div>
-
-            {/* Comparison */}
-            <div className="bg-white rounded-lg border border-border p-4">
-              <h3 className="text-sm font-bold text-text-secondary mb-3">
-                ロープアクセスとの比較
+                ロープアクセスとの比較（全面ロープの場合）
               </h3>
               <ComparisonBar result={result} />
             </div>
@@ -884,7 +978,7 @@ export default function EstimatePage() {
 
       <footer className="border-t border-border mt-8 py-4">
         <p className="text-center text-xs text-text-muted">
-          ミラテクドローン 見積もりシミュレーター v1.0 --
+          ミラテクドローン 見積もりシミュレーター v2.0 —
           概算見積もり用。正式見積もりは現地調査後に作成します。
         </p>
       </footer>
