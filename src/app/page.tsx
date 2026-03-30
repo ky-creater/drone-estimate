@@ -8,12 +8,14 @@ import {
   type EstimateResult,
   type FeasibilityItem,
   type ScenarioResult,
+  type SensitivityResult,
   type AccessLevel,
   type InspectionMethod,
   DEFAULT_CONFIG,
   PRESETS,
   createDefaultFace,
   calculateEstimate,
+  calculateSensitivity,
 } from "@/lib/estimate-engine";
 
 // --- Helpers ---
@@ -258,6 +260,98 @@ function FaceSummaryTable({ result }: { result: EstimateResult }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// --- Sensitivity Analysis Table ---
+
+function SensitivityTable({
+  building,
+  config,
+  showCost,
+}: {
+  building: BuildingInput;
+  config: CostConfig;
+  showCost: boolean;
+}) {
+  const sensitivity = useMemo(
+    () =>
+      calculateSensitivity(building, config, {
+        min: 150,
+        max: 400,
+        step: 50,
+      }),
+    [building, config]
+  );
+
+  if (sensitivity.rows.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-lg border border-border p-4">
+      <h3 className="text-sm font-bold text-text-secondary mb-1">
+        感度分析
+      </h3>
+      <p className="text-xs text-text-muted mb-3">
+        販売単価とドローン適用面数による利益シミュレーション（現在の単価: {config.unitPricePerM2}円/m2）
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b-2 border-border">
+              <th className="text-left py-2 px-2 font-medium text-text-secondary whitespace-nowrap">
+                販売単価
+              </th>
+              {sensitivity.scenarios.map((s) => (
+                <th
+                  key={s}
+                  className="text-center py-2 px-2 font-medium text-text-secondary whitespace-nowrap"
+                >
+                  {s}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sensitivity.rows.map((row) => {
+              const isCurrentPrice = row.unitPrice === config.unitPricePerM2;
+              return (
+                <tr
+                  key={row.unitPrice}
+                  className={`border-b border-border ${isCurrentPrice ? "bg-accent/10 font-bold" : ""}`}
+                >
+                  <td className="py-2 px-2 whitespace-nowrap">
+                    {row.unitPrice}円/m2
+                    {isCurrentPrice && (
+                      <span className="ml-1 text-xs text-accent">← 現在</span>
+                    )}
+                  </td>
+                  {row.scenarios.map((sc) => (
+                    <td key={sc.label} className="py-2 px-2 text-center">
+                      <div
+                        className={`rounded px-2 py-1 ${sc.profit >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
+                      >
+                        <div className="text-xs">
+                          {sc.profit >= 0 ? "+" : ""}
+                          {sc.profit.toLocaleString("ja-JP")}円
+                        </div>
+                        {showCost && (
+                          <div className="text-xs opacity-75">
+                            ({sc.profitRate.toFixed(1)}%)
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-text-muted mt-2">
+        ※ 利益 = 販売価格 - 原価（解析外注時）。ロープアクセス面は500円/m2で計算。
+      </p>
     </div>
   );
 }
@@ -1035,6 +1129,13 @@ export default function EstimatePage() {
                 </div>
               </div>
             </div>
+
+            {/* Sensitivity Analysis */}
+            <SensitivityTable
+              building={building}
+              config={config}
+              showCost={showCost}
+            />
 
             {/* Two-Scenario Comparison */}
             <div>
