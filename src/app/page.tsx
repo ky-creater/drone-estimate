@@ -736,13 +736,21 @@ export default function EstimatePage() {
     <div className="min-h-screen">
       {/* Header */}
       <header className="bg-primary text-white">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <h1 className="text-lg font-bold">
-            ミラテクドローン 見積もりシミュレーター
-          </h1>
-          <p className="text-sm text-blue-200 mt-0.5">
-            ドローン外壁調査の概算見積もりを即時算出
-          </p>
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold">
+              ミラテクドローン 見積もりシミュレーター
+            </h1>
+            <p className="text-sm text-blue-200 mt-0.5">
+              ドローン外壁調査の概算見積もりを即時算出
+            </p>
+          </div>
+          <a
+            href="#results"
+            className="lg:hidden text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full transition-colors"
+          >
+            結果を見る
+          </a>
         </div>
       </header>
 
@@ -794,7 +802,6 @@ export default function EstimatePage() {
                     <input
                       type="number"
                       value={building.totalArea || ""}
-<<<<<<< HEAD
                       onChange={(e) => {
                         const newTotal = Number(e.target.value) || 0;
                         const currentSum = building.faces.reduce((s, f) => s + f.area, 0);
@@ -810,14 +817,6 @@ export default function EstimatePage() {
                           faces: newFaces,
                         });
                       }}
-=======
-                      onChange={(e) =>
-                        setBuilding({
-                          ...building,
-                          totalArea: Number(e.target.value) || 0,
-                        })
-                      }
->>>>>>> 82d4cc60f511d99f585f5c81c31a1e1c802589a4
                       className="w-full border border-border rounded px-3 py-2 text-sm"
                     />
                   </div>
@@ -895,7 +894,7 @@ export default function EstimatePage() {
           </div>
 
           {/* Right: Results */}
-          <div className="lg:col-span-3 space-y-4">
+          <div id="results" className="lg:col-span-3 space-y-4">
             {/* Feasibility */}
             <div
               className={`rounded-lg border p-4 ${overallBg[result.feasibility.overall]}`}
@@ -1022,8 +1021,9 @@ export default function EstimatePage() {
 
       <footer className="border-t border-border mt-8 py-4">
         <p className="text-center text-xs text-text-muted">
-          ミラテクドローン 見積もりシミュレーター v2.0 —
+          ミラテクドローン 見積もりシミュレーター v2.1 —
           概算見積もり用。正式見積もりは現地調査後に作成します。
+          人件費は国交省R7年度設計業務委託等技術者単価に準拠。
         </p>
       </footer>
     </div>
