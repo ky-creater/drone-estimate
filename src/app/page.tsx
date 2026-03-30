@@ -1073,7 +1073,7 @@ export default function EstimatePage() {
 
       <footer className="border-t border-border mt-8 py-4">
         <p className="text-center text-xs text-text-muted">
-          ミラテクドローン 見積もりシミュレーター v2.1 —
+          ミラテクドローン 見積もりシミュレーター v2.2 —
           概算見積もり用。正式見積もりは現地調査後に作成します。
           人件費は国交省R7年度設計業務委託等技術者単価に準拠。
         </p>
