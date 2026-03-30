@@ -794,6 +794,7 @@ export default function EstimatePage() {
                     <input
                       type="number"
                       value={building.totalArea || ""}
+<<<<<<< HEAD
                       onChange={(e) => {
                         const newTotal = Number(e.target.value) || 0;
                         const currentSum = building.faces.reduce((s, f) => s + f.area, 0);
@@ -809,6 +810,14 @@ export default function EstimatePage() {
                           faces: newFaces,
                         });
                       }}
+=======
+                      onChange={(e) =>
+                        setBuilding({
+                          ...building,
+                          totalArea: Number(e.target.value) || 0,
+                        })
+                      }
+>>>>>>> 82d4cc60f511d99f585f5c81c31a1e1c802589a4
                       className="w-full border border-border rounded px-3 py-2 text-sm"
                     />
                   </div>
