@@ -671,6 +671,7 @@ export default function EstimatePage() {
     return { ...DEFAULT_CONFIG };
   });
   const [showCost, setShowCost] = useState(true);
+  const [showFaces, setShowFaces] = useState(false);
 
   useEffect(() => {
     try {
@@ -792,10 +793,11 @@ export default function EstimatePage() {
             </div>
 
             {/* Building Info */}
-            <div className="bg-white rounded-lg border border-border p-4">
-              <h2 className="text-sm font-bold text-text-secondary mb-3">
-                ビル基本情報
+            <div className="bg-white rounded-lg border-2 border-accent/30 p-4">
+              <h2 className="text-sm font-bold text-accent mb-1">
+                Step 1: ビル情報を入力
               </h2>
+              <p className="text-xs text-text-muted mb-3">入力すると右側に見積もり結果が表示されます</p>
               <div className="space-y-3">
                 <div>
                   <label className="text-xs text-text-muted">ビル名</label>
@@ -820,12 +822,25 @@ export default function EstimatePage() {
                       onChange={(e) => {
                         const newTotal = Number(e.target.value) || 0;
                         const currentSum = building.faces.reduce((s, f) => s + f.area, 0);
-                        const ratio = currentSum > 0 ? newTotal / currentSum : 0;
-                        const newFaces = building.faces.map((f) => ({
-                          ...f,
-                          area: Math.round(f.area * ratio),
-                          ropeAccessArea: f.accessLevel === "no-drone" ? Math.round(f.area * ratio) : f.ropeAccessArea,
-                        }));
+                        let newFaces: FaceInput[];
+                        if (currentSum === 0 || building.faces.length === 0) {
+                          // 面が空 or 面積合計0 → 4面を自動生成（長辺:短辺 = 3:2）
+                          const long = Math.round(newTotal * 0.3);
+                          const short = Math.round(newTotal * 0.2);
+                          newFaces = [
+                            createDefaultFace("北面", long),
+                            createDefaultFace("東面", short),
+                            createDefaultFace("南面", long),
+                            createDefaultFace("西面", short),
+                          ];
+                        } else {
+                          const ratio = newTotal / currentSum;
+                          newFaces = building.faces.map((f) => ({
+                            ...f,
+                            area: Math.round(f.area * ratio),
+                            ropeAccessArea: f.accessLevel === "no-drone" ? Math.round(f.area * ratio) : f.ropeAccessArea,
+                          }));
+                        }
                         setBuilding({
                           ...building,
                           totalArea: newTotal,
@@ -867,19 +882,32 @@ export default function EstimatePage() {
               </div>
             </div>
 
-            {/* Faces */}
+            {/* Faces - collapsible detail section */}
             <div className="bg-white rounded-lg border border-border p-4">
               <div className="flex justify-between items-center mb-3">
-                <h2 className="text-sm font-bold text-text-secondary">
-                  各面の設定
-                </h2>
+                <button
+                  onClick={() => setShowFaces(!showFaces)}
+                  className="flex items-center gap-2 text-sm font-bold text-text-secondary hover:text-primary"
+                >
+                  <span className={`transition-transform text-xs ${showFaces ? "rotate-90" : ""}`}>
+                    &#9654;
+                  </span>
+                  各面の詳細調整
+                  <span className="text-xs font-normal text-text-muted">
+                    （{building.faces.length}面 / 総面積から自動配分済み）
+                  </span>
+                </button>
+                {showFaces && (
                 <button
                   onClick={addFace}
                   className="text-xs px-2 py-1 border border-accent text-accent rounded hover:bg-accent hover:text-white transition-colors"
                 >
                   + 面を追加
                 </button>
+                )}
               </div>
+              {showFaces && (
+              <>
               <div className="space-y-3">
                 {building.faces.map((face, i) => (
                   <FaceEditor
@@ -895,6 +923,8 @@ export default function EstimatePage() {
                 <p className="text-sm text-text-muted text-center py-4">
                   面が設定されていません
                 </p>
+              )}
+              </>
               )}
             </div>
 
