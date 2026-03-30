@@ -8,12 +8,14 @@ import {
   type EstimateResult,
   type FeasibilityItem,
   type ScenarioResult,
+  type SensitivityResult,
   type AccessLevel,
   type InspectionMethod,
   DEFAULT_CONFIG,
   PRESETS,
   createDefaultFace,
   calculateEstimate,
+  calculateSensitivity,
 } from "@/lib/estimate-engine";
 
 // --- Helpers ---
@@ -262,6 +264,98 @@ function FaceSummaryTable({ result }: { result: EstimateResult }) {
   );
 }
 
+// --- Sensitivity Analysis Table ---
+
+function SensitivityTable({
+  building,
+  config,
+  showCost,
+}: {
+  building: BuildingInput;
+  config: CostConfig;
+  showCost: boolean;
+}) {
+  const sensitivity = useMemo(
+    () =>
+      calculateSensitivity(building, config, {
+        min: 150,
+        max: 400,
+        step: 50,
+      }),
+    [building, config]
+  );
+
+  if (sensitivity.rows.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-lg border border-border p-4">
+      <h3 className="text-sm font-bold text-text-secondary mb-1">
+        感度分析
+      </h3>
+      <p className="text-xs text-text-muted mb-3">
+        販売単価とドローン適用面数による利益シミュレーション（現在の単価: {config.unitPricePerM2}円/m2）
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b-2 border-border">
+              <th className="text-left py-2 px-2 font-medium text-text-secondary whitespace-nowrap">
+                販売単価
+              </th>
+              {sensitivity.scenarios.map((s) => (
+                <th
+                  key={s}
+                  className="text-center py-2 px-2 font-medium text-text-secondary whitespace-nowrap"
+                >
+                  {s}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sensitivity.rows.map((row) => {
+              const isCurrentPrice = row.unitPrice === config.unitPricePerM2;
+              return (
+                <tr
+                  key={row.unitPrice}
+                  className={`border-b border-border ${isCurrentPrice ? "bg-accent/10 font-bold" : ""}`}
+                >
+                  <td className="py-2 px-2 whitespace-nowrap">
+                    {row.unitPrice}円/m2
+                    {isCurrentPrice && (
+                      <span className="ml-1 text-xs text-accent">← 現在</span>
+                    )}
+                  </td>
+                  {row.scenarios.map((sc) => (
+                    <td key={sc.label} className="py-2 px-2 text-center">
+                      <div
+                        className={`rounded px-2 py-1 ${sc.profit >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
+                      >
+                        <div className="text-xs">
+                          {sc.profit >= 0 ? "+" : ""}
+                          {sc.profit.toLocaleString("ja-JP")}円
+                        </div>
+                        {showCost && (
+                          <div className="text-xs opacity-75">
+                            ({sc.profitRate.toFixed(1)}%)
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-text-muted mt-2">
+        ※ 利益 = 販売価格 - 原価（解析外注時）。ロープアクセス面は500円/m2で計算。
+      </p>
+    </div>
+  );
+}
+
 // --- Face Editor ---
 
 function FaceEditor({
@@ -408,6 +502,55 @@ function FaceEditor({
 
 // --- Config Editor ---
 
+// Slider + number input for adjustable values
+function SliderField({
+  label,
+  value,
+  onChange: onChangeVal,
+  min,
+  max,
+  step,
+  unit,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-center">
+        <label className="text-xs font-medium text-text-secondary">{label}</label>
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            value={value}
+            onChange={(e) => onChangeVal(Number(e.target.value) || 0)}
+            className="w-16 border border-border rounded px-1 py-0.5 text-sm text-right"
+          />
+          <span className="text-xs text-text-muted">{unit}</span>
+        </div>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChangeVal(Number(e.target.value))}
+        className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-accent"
+      />
+      <div className="flex justify-between text-xs text-text-muted">
+        <span>{min}{unit}</span>
+        <span>{max}{unit}</span>
+      </div>
+    </div>
+  );
+}
+
 function ConfigEditor({
   config,
   onChange,
@@ -417,230 +560,94 @@ function ConfigEditor({
   onChange: (config: CostConfig) => void;
   onReset: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
-  const updateEquipment = (key: keyof CostConfig["equipment"], val: number) => {
-    onChange({
-      ...config,
-      equipment: { ...config.equipment, [key]: val },
-    });
-  };
-  const updateIR = (key: keyof CostConfig["irAnalysis"], val: number) => {
-    onChange({
-      ...config,
-      irAnalysis: { ...config.irAnalysis, [key]: val },
-    });
-  };
-
-  const NumField = ({
-    label,
-    value,
-    onChangeVal,
-    unit,
-  }: {
-    label: string;
-    value: number;
-    onChangeVal: (v: number) => void;
-    unit: string;
-  }) => (
-    <div>
-      <label className="text-xs text-text-muted block mb-0.5">{label}</label>
-      <div className="flex items-center gap-1">
-        <input
-          type="number"
-          value={value || ""}
-          onChange={(e) => onChangeVal(Number(e.target.value) || 0)}
-          className="w-full border border-border rounded px-2 py-1 text-sm"
-        />
-        <span className="text-xs text-text-muted whitespace-nowrap">
-          {unit}
-        </span>
-      </div>
-    </div>
-  );
+  const [showConstants, setShowConstants] = useState(false);
 
   return (
-    <div className="border-t border-border mt-6 pt-4">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 text-sm font-bold text-text-secondary hover:text-primary"
-      >
-        <span className={`transition-transform ${open ? "rotate-90" : ""}`}>
-          ▶
-        </span>
-        単価設定（詳細）
-      </button>
-      {open && (
-        <div className="mt-4 space-y-4">
-          <div className="flex justify-end">
-            <button
-              onClick={onReset}
-              className="text-xs px-3 py-1 border border-border rounded hover:bg-gray-50"
-            >
-              デフォルトに戻す
-            </button>
-          </div>
-
-          <div>
-            <h4 className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-              人件費（国交省R7単価準拠）
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              <NumField
-                label="調査現場責任者 x1"
-                value={config.personnelDetail.siteManager}
-                onChangeVal={(v) =>
-                  onChange({ ...config, personnelDetail: { ...config.personnelDetail, siteManager: v }, teamCostPerDay: v + config.personnelDetail.pilot + config.personnelDetail.photographer + config.personnelDetail.assistantOrTechB * 2 })
-                }
-                unit="円/日"
-              />
-              <NumField
-                label="操縦士 x1"
-                value={config.personnelDetail.pilot}
-                onChangeVal={(v) =>
-                  onChange({ ...config, personnelDetail: { ...config.personnelDetail, pilot: v }, teamCostPerDay: config.personnelDetail.siteManager + v + config.personnelDetail.photographer + config.personnelDetail.assistantOrTechB * 2 })
-                }
-                unit="円/日"
-              />
-              <NumField
-                label="撮影士 x1"
-                value={config.personnelDetail.photographer}
-                onChangeVal={(v) =>
-                  onChange({ ...config, personnelDetail: { ...config.personnelDetail, photographer: v }, teamCostPerDay: config.personnelDetail.siteManager + config.personnelDetail.pilot + v + config.personnelDetail.assistantOrTechB * 2 })
-                }
-                unit="円/日"
-              />
-              <NumField
-                label="撮影助手/技師B x2"
-                value={config.personnelDetail.assistantOrTechB}
-                onChangeVal={(v) =>
-                  onChange({ ...config, personnelDetail: { ...config.personnelDetail, assistantOrTechB: v }, teamCostPerDay: config.personnelDetail.siteManager + config.personnelDetail.pilot + config.personnelDetail.photographer + v * 2 })
-                }
-                unit="円/日(1人)"
-              />
-            </div>
-            <p className="text-xs text-text-muted mt-1">
-              チーム合計: {config.teamCostPerDay.toLocaleString()}円/日（5名）
-            </p>
-          </div>
-
-          <div>
-            <h4 className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-              機材費（円/日）
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              <NumField
-                label="ドローン損料"
-                value={config.equipment.drone}
-                onChangeVal={(v) => updateEquipment("drone", v)}
-                unit="円/日"
-              />
-              <NumField
-                label="IRカメラ"
-                value={config.equipment.irCamera}
-                onChangeVal={(v) => updateEquipment("irCamera", v)}
-                unit="円/日"
-              />
-              <NumField
-                label="ラインドローン"
-                value={config.equipment.lineDroneSystem}
-                onChangeVal={(v) => updateEquipment("lineDroneSystem", v)}
-                unit="円/日"
-              />
-              <NumField
-                label="その他"
-                value={config.equipment.misc}
-                onChangeVal={(v) => updateEquipment("misc", v)}
-                unit="円/日"
-              />
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-              赤外線解析・その他
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              <NumField
-                label="外注解析"
-                value={config.irAnalysis.outsourceCostPerM2}
-                onChangeVal={(v) => updateIR("outsourceCostPerM2", v)}
-                unit="円/m2"
-              />
-              <NumField
-                label="自社解析"
-                value={config.irAnalysis.internalCostPerM2}
-                onChangeVal={(v) => updateIR("internalCostPerM2", v)}
-                unit="円/m2"
-              />
-              <NumField
-                label="交通費"
-                value={config.transportationPerDay}
-                onChangeVal={(v) =>
-                  onChange({ ...config, transportationPerDay: v })
-                }
-                unit="円/日"
-              />
-              <NumField
-                label="調査能力(ドローン)"
-                value={config.droneCapacityPerDay}
-                onChangeVal={(v) =>
-                  onChange({ ...config, droneCapacityPerDay: v })
-                }
-                unit="m2/日"
-              />
-              <NumField
-                label="調査能力(地上IR)"
-                value={config.groundIRCapacityPerDay}
-                onChangeVal={(v) =>
-                  onChange({ ...config, groundIRCapacityPerDay: v })
-                }
-                unit="m2/日"
-              />
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-              料率・単価
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              <NumField
-                label="一般管理費率"
-                value={config.adminRatePercent}
-                onChangeVal={(v) =>
-                  onChange({ ...config, adminRatePercent: v })
-                }
-                unit="%"
-              />
-              <NumField
-                label="ドローン販売単価"
-                value={config.unitPricePerM2}
-                onChangeVal={(v) =>
-                  onChange({ ...config, unitPricePerM2: v })
-                }
-                unit="円/m2"
-              />
-              <NumField
-                label="ロープアクセス顧客単価"
-                value={config.ropeAccessPricePerM2}
-                onChangeVal={(v) =>
-                  onChange({ ...config, ropeAccessPricePerM2: v })
-                }
-                unit="円/m2"
-              />
-              <NumField
-                label="ロープアクセス下請単価"
-                value={config.ropeAccessPercussionPerM2}
-                onChangeVal={(v) =>
-                  onChange({ ...config, ropeAccessPercussionPerM2: v })
-                }
-                unit="円/m2"
-              />
-            </div>
-          </div>
+    <div className="space-y-4">
+      {/* 変数: スライダーで調整可能 */}
+      <div>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-sm font-bold text-accent">Step 2: 単価を調整</h3>
+          <button
+            onClick={onReset}
+            className="text-xs px-2 py-0.5 border border-border rounded hover:bg-gray-50"
+          >
+            リセット
+          </button>
         </div>
-      )}
+        <div className="space-y-4">
+          <SliderField
+            label="ドローン調査 販売単価"
+            value={config.unitPricePerM2}
+            onChange={(v) => onChange({ ...config, unitPricePerM2: v })}
+            min={100}
+            max={500}
+            step={10}
+            unit="円/m2"
+          />
+          <SliderField
+            label="ロープアクセス 顧客単価"
+            value={config.ropeAccessPricePerM2}
+            onChange={(v) => onChange({ ...config, ropeAccessPricePerM2: v })}
+            min={300}
+            max={800}
+            step={10}
+            unit="円/m2"
+          />
+          <SliderField
+            label="一般管理費率"
+            value={config.adminRatePercent}
+            onChange={(v) => onChange({ ...config, adminRatePercent: v })}
+            min={5}
+            max={40}
+            step={1}
+            unit="%"
+          />
+        </div>
+      </div>
+
+      {/* 定数: 折りたたみ参考表示 */}
+      <div className="border-t border-border pt-3">
+        <button
+          onClick={() => setShowConstants(!showConstants)}
+          className="flex items-center gap-2 text-xs text-text-muted hover:text-text-secondary"
+        >
+          <span className={`transition-transform ${showConstants ? "rotate-90" : ""}`}>
+            &#9654;
+          </span>
+          原価パラメータ（定数 / 上級者向け）
+        </button>
+        {showConstants && (
+          <div className="mt-3 space-y-3 text-xs">
+            <div className="bg-gray-50 rounded p-3">
+              <h4 className="font-bold text-text-secondary mb-2">人件費（国交省R7単価準拠）</h4>
+              <div className="grid grid-cols-2 gap-1 text-text-muted">
+                <span>現場責任者 x1</span><span className="text-right">{config.personnelDetail.siteManager.toLocaleString()}円/日</span>
+                <span>操縦士 x1</span><span className="text-right">{config.personnelDetail.pilot.toLocaleString()}円/日</span>
+                <span>撮影士 x1</span><span className="text-right">{config.personnelDetail.photographer.toLocaleString()}円/日</span>
+                <span>助手/技師B x2</span><span className="text-right">{config.personnelDetail.assistantOrTechB.toLocaleString()}円/日(1人)</span>
+              </div>
+              <div className="mt-1 pt-1 border-t border-border font-bold text-text-secondary">
+                チーム合計: {config.teamCostPerDay.toLocaleString()}円/日（5名）
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded p-3">
+              <h4 className="font-bold text-text-secondary mb-2">機材・解析・その他</h4>
+              <div className="grid grid-cols-2 gap-1 text-text-muted">
+                <span>ドローン損料</span><span className="text-right">{config.equipment.drone.toLocaleString()}円/日</span>
+                <span>IRカメラ</span><span className="text-right">{config.equipment.irCamera.toLocaleString()}円/日</span>
+                <span>その他機材</span><span className="text-right">{config.equipment.misc.toLocaleString()}円/日</span>
+                <span>外注解析</span><span className="text-right">{config.irAnalysis.outsourceCostPerM2}円/m2</span>
+                <span>自社解析</span><span className="text-right">{config.irAnalysis.internalCostPerM2}円/m2</span>
+                <span>交通費</span><span className="text-right">{config.transportationPerDay.toLocaleString()}円/日</span>
+                <span>ロープ下請単価</span><span className="text-right">{config.ropeAccessPercussionPerM2}円/m2</span>
+                <span>調査能力(ドローン)</span><span className="text-right">{config.droneCapacityPerDay.toLocaleString()}m2/日</span>
+                <span>調査能力(地上IR)</span><span className="text-right">{config.groundIRCapacityPerDay.toLocaleString()}m2/日</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1035,6 +1042,13 @@ export default function EstimatePage() {
                 </div>
               </div>
             </div>
+
+            {/* Sensitivity Analysis */}
+            <SensitivityTable
+              building={building}
+              config={config}
+              showCost={showCost}
+            />
 
             {/* Two-Scenario Comparison */}
             <div>

@@ -170,7 +170,7 @@ export const DEFAULT_CONFIG: CostConfig = {
   },
   transportationPerDay: 8000,  // 熊谷→都心部往復（倉田さん: 片道3,000-5,000円）
   adminRatePercent: 20,
-  unitPricePerM2: 280,
+  unitPricePerM2: 210,
   ropeAccessPricePerM2: 500,
   ropeAccessPercussionPerM2: 300,
 };
@@ -244,38 +244,46 @@ export const PRESETS: BuildingPreset[] = [
     ],
   },
   {
-    name: "複合用途ビル",
-    label: "複合用途ビル (~10,000m2)",
-    totalArea: 10000,
-    floors: 12,
-    height: 45,
+    name: "東劇ビル",
+    label: "東劇ビル (17,000m2)",
+    totalArea: 17000,
+    floors: 19,
+    height: 70,
     faces: [
       {
-        ...createDefaultFace("北面", 2500),
+        ...createDefaultFace("北面", 4000),
         accessLevel: "no-drone" as AccessLevel,
         inspectionMethod: "percussion" as InspectionMethod,
-        note: "室外機・チラーがあるためドローン不可",
-        ropeAccessArea: 2500,
+        note: "大通りに面しており飛行規制によりドローン不可",
+        ropeAccessArea: 4000,
       },
       {
-        ...createDefaultFace("東面", 1500),
+        ...createDefaultFace("東面", 3000),
         accessLevel: "no-drone" as AccessLevel,
         inspectionMethod: "percussion" as InspectionMethod,
-        note: "幹線道路に面しているためドローン不可",
-        ropeAccessArea: 1500,
+        note: "離発着場所不明、机上判断不可",
+        ropeAccessArea: 3000,
       },
       {
-        ...createDefaultFace("南面", 3500),
+        ...createDefaultFace("南面", 4000),
         accessLevel: "line-drone" as AccessLevel,
         inspectionMethod: "infrared" as InspectionMethod,
-        note: "ラインドローン使用",
+        note: "ラインドローンシステムでの赤外線調査が可能",
       },
       {
-        ...createDefaultFace("西面", 2500),
+        ...createDefaultFace("西面", 3000),
         accessLevel: "no-drone" as AccessLevel,
         inspectionMethod: "percussion" as InspectionMethod,
-        note: "室外機・チラーがあるためドローン不可",
-        ropeAccessArea: 2500,
+        note: "離発着場所不明、机上判断不可",
+        ropeAccessArea: 3000,
+      },
+      {
+        ...createDefaultFace("低層部", 3000),
+        accessLevel: "free-drone" as AccessLevel,
+        inspectionMethod: "infrared" as InspectionMethod,
+        groundIRPossible: true,
+        groundIRArea: 3000,
+        note: "ハンディ赤外線カメラにて診断",
       },
     ],
   },
@@ -310,6 +318,26 @@ export const PRESETS: BuildingPreset[] = [
     ],
   },
 ];
+
+// --- Sensitivity Analysis Types ---
+
+export interface SensitivityScenario {
+  label: string;
+  salesPrice: number;
+  totalCost: number;
+  profit: number;
+  profitRate: number;
+}
+
+export interface SensitivityRow {
+  unitPrice: number;
+  scenarios: SensitivityScenario[];
+}
+
+export interface SensitivityResult {
+  rows: SensitivityRow[];
+  scenarios: string[];
+}
 
 // --- Feasibility Check ---
 
@@ -622,5 +650,114 @@ export function calculateEstimate(
     current,
     future,
     comparison,
+  };
+}
+
+// --- Sensitivity Analysis ---
+
+function buildScenarioFaces(
+  originalFaces: FaceInput[],
+  droneCount: number
+): FaceInput[] {
+  // Separate ground-IR-only faces from regular faces
+  const groundIRFaces = originalFaces.filter(
+    (f) => f.groundIRPossible && f.groundIRArea >= f.area
+  );
+  const regularFaces = originalFaces.filter(
+    (f) => !(f.groundIRPossible && f.groundIRArea >= f.area)
+  );
+
+  // Sort regular faces: prioritize faces that were originally line-drone or free-drone
+  const sorted = [...regularFaces].sort((a, b) => {
+    const order: Record<AccessLevel, number> = {
+      "line-drone": 0,
+      "free-drone": 1,
+      "no-drone": 2,
+    };
+    return order[a.accessLevel] - order[b.accessLevel];
+  });
+
+  const scenarioFaces = sorted.map((face, i) => {
+    if (i < droneCount) {
+      // This face uses line-drone
+      return {
+        ...face,
+        accessLevel: "line-drone" as AccessLevel,
+        inspectionMethod: "infrared" as InspectionMethod,
+        ropeAccessArea: 0,
+      };
+    } else {
+      // This face uses rope access
+      return {
+        ...face,
+        accessLevel: "no-drone" as AccessLevel,
+        inspectionMethod: "percussion" as InspectionMethod,
+        ropeAccessArea: face.area,
+      };
+    }
+  });
+
+  return [...scenarioFaces, ...groundIRFaces];
+}
+
+export function calculateSensitivity(
+  building: BuildingInput,
+  config: CostConfig,
+  priceRange: { min: number; max: number; step: number }
+): SensitivityResult {
+  // Count regular (non-ground-IR) faces for scenario generation
+  const regularFaces = building.faces.filter(
+    (f) => !(f.groundIRPossible && f.groundIRArea >= f.area)
+  );
+  const regularCount = regularFaces.length;
+
+  // Define scenarios
+  const scenarioDefs: { label: string; droneCount: number }[] = [
+    { label: "全面ロープ", droneCount: 0 },
+    { label: "1面ドローン", droneCount: 1 },
+  ];
+  if (regularCount >= 3) {
+    scenarioDefs.push({ label: "3面ドローン", droneCount: 3 });
+  }
+  if (regularCount >= 2 && regularCount < 3) {
+    scenarioDefs.push({
+      label: `${regularCount}面ドローン`,
+      droneCount: regularCount,
+    });
+  }
+
+  const rows: SensitivityRow[] = [];
+
+  for (
+    let price = priceRange.min;
+    price <= priceRange.max;
+    price += priceRange.step
+  ) {
+    const scenarioResults: SensitivityScenario[] = scenarioDefs.map((sd) => {
+      const faces = buildScenarioFaces(building.faces, sd.droneCount);
+      const modifiedBuilding: BuildingInput = {
+        ...building,
+        faces,
+      };
+      const modifiedConfig: CostConfig = {
+        ...config,
+        unitPricePerM2: price,
+      };
+      const est = calculateEstimate(modifiedBuilding, modifiedConfig);
+      return {
+        label: sd.label,
+        salesPrice: est.current.salesPrice,
+        totalCost: est.current.costBreakdown.totalCost,
+        profit: est.current.profit,
+        profitRate: est.current.profitRate,
+      };
+    });
+
+    rows.push({ unitPrice: price, scenarios: scenarioResults });
+  }
+
+  return {
+    rows,
+    scenarios: scenarioDefs.map((s) => s.label),
   };
 }
