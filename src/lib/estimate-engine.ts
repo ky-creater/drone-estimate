@@ -42,13 +42,22 @@ export interface IRAnalysisConfig {
   internalCostPerM2: number;
 }
 
+// 職種別単価（国交省R7年度 設計業務委託等技術者単価準拠）
+export interface PersonnelDetail {
+  siteManager: number;     // 調査現場責任者（主任技師相当）×1
+  pilot: number;           // 操縦士 ×1
+  photographer: number;    // 撮影士 ×1
+  assistantOrTechB: number; // 撮影助手 or 技師(B) ×2
+}
+
 export interface CostConfig {
-  teamCostPerDay: number;     // チーム全体 (5人×50,000円)
+  teamCostPerDay: number;     // チーム全体（自動計算も可能）
+  personnelDetail: PersonnelDetail; // 職種別内訳（参考表示用）
   droneCapacityPerDay: number;
   groundIRCapacityPerDay: number;
   equipment: EquipmentConfig;
   irAnalysis: IRAnalysisConfig;
-  transportationPerDay: number;
+  transportationPerDay: number;  // 熊谷→都心部往復
   adminRatePercent: number;
   unitPricePerM2: number;
   ropeAccessPricePerM2: number;
@@ -130,21 +139,36 @@ export interface EstimateResult {
 
 // --- Defaults ---
 
+// 国交省R7年度単価ベースのデフォルト値
+export const DEFAULT_PERSONNEL: PersonnelDetail = {
+  siteManager: 66900,      // 主任技師（設計業務）
+  pilot: 56300,            // 操縦士（航空・船舶）
+  photographer: 48200,     // 撮影士（航空・船舶）
+  assistantOrTechB: 36400, // 撮影助手（航空・船舶）※技師Bなら48,500円
+};
+
+// チーム合計: 66,900 + 56,300 + 48,200 + 36,400×2 = 244,200円
+export const DEFAULT_TEAM_COST = DEFAULT_PERSONNEL.siteManager
+  + DEFAULT_PERSONNEL.pilot
+  + DEFAULT_PERSONNEL.photographer
+  + DEFAULT_PERSONNEL.assistantOrTechB * 2;
+
 export const DEFAULT_CONFIG: CostConfig = {
-  teamCostPerDay: 250000,       // 5人×50,000円
+  teamCostPerDay: DEFAULT_TEAM_COST, // 244,200円（国交省R7単価準拠）
+  personnelDetail: { ...DEFAULT_PERSONNEL },
   droneCapacityPerDay: 2500,
   groundIRCapacityPerDay: 1500,
   equipment: {
-    drone: 15000,
+    drone: 25000,              // ドローン機材損料（倉田さん回答: 約25,000円/日）
     irCamera: 10000,
-    lineDroneSystem: 25000,
+    lineDroneSystem: 0,        // 車両損料に含む（倉田さん: 積載物多く車両運搬）
     misc: 5000,
   },
   irAnalysis: {
-    outsourceCostPerM2: 120,
-    internalCostPerM2: 60,
+    outsourceCostPerM2: 120,   // Sugitec外注
+    internalCostPerM2: 60,     // 自社実施
   },
-  transportationPerDay: 30000,
+  transportationPerDay: 8000,  // 熊谷→都心部往復（倉田さん: 片道3,000-5,000円）
   adminRatePercent: 20,
   unitPricePerM2: 200,
   ropeAccessPricePerM2: 500,

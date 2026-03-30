@@ -491,20 +491,44 @@ function ConfigEditor({
 
           <div>
             <h4 className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-              人件費
+              人件費（国交省R7単価準拠）
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               <NumField
-                label="チーム合計（5人/日）"
-                value={config.teamCostPerDay}
+                label="調査現場責任者 x1"
+                value={config.personnelDetail.siteManager}
                 onChangeVal={(v) =>
-                  onChange({ ...config, teamCostPerDay: v })
+                  onChange({ ...config, personnelDetail: { ...config.personnelDetail, siteManager: v }, teamCostPerDay: v + config.personnelDetail.pilot + config.personnelDetail.photographer + config.personnelDetail.assistantOrTechB * 2 })
                 }
                 unit="円/日"
               />
+              <NumField
+                label="操縦士 x1"
+                value={config.personnelDetail.pilot}
+                onChangeVal={(v) =>
+                  onChange({ ...config, personnelDetail: { ...config.personnelDetail, pilot: v }, teamCostPerDay: config.personnelDetail.siteManager + v + config.personnelDetail.photographer + config.personnelDetail.assistantOrTechB * 2 })
+                }
+                unit="円/日"
+              />
+              <NumField
+                label="撮影士 x1"
+                value={config.personnelDetail.photographer}
+                onChangeVal={(v) =>
+                  onChange({ ...config, personnelDetail: { ...config.personnelDetail, photographer: v }, teamCostPerDay: config.personnelDetail.siteManager + config.personnelDetail.pilot + v + config.personnelDetail.assistantOrTechB * 2 })
+                }
+                unit="円/日"
+              />
+              <NumField
+                label="撮影助手/技師B x2"
+                value={config.personnelDetail.assistantOrTechB}
+                onChangeVal={(v) =>
+                  onChange({ ...config, personnelDetail: { ...config.personnelDetail, assistantOrTechB: v }, teamCostPerDay: config.personnelDetail.siteManager + config.personnelDetail.pilot + config.personnelDetail.photographer + v * 2 })
+                }
+                unit="円/日(1人)"
+              />
             </div>
             <p className="text-xs text-text-muted mt-1">
-              内訳目安: パイロット + 補助者 + 安全管理者 + IR技術者 + 作業員 = 5名 x 50,000円
+              チーム合計: {config.teamCostPerDay.toLocaleString()}円/日（5名）
             </p>
           </div>
 
