@@ -570,7 +570,7 @@ function ConfigEditor({
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               <NumField
-                label="外注解析（Sugitec）"
+                label="外注解析"
                 value={config.irAnalysis.outsourceCostPerM2}
                 onChangeVal={(v) => updateIR("outsourceCostPerM2", v)}
                 unit="円/m2"
@@ -790,7 +790,7 @@ export default function EstimatePage() {
                     onChange={(e) =>
                       setBuilding({ ...building, name: e.target.value })
                     }
-                    placeholder="例: 東劇ビル"
+                    placeholder="例: 新宿オフィスビル"
                     className="w-full border border-border rounded px-3 py-2 text-sm"
                   />
                 </div>
@@ -895,6 +895,11 @@ export default function EstimatePage() {
 
           {/* Right: Results */}
           <div id="results" className="lg:col-span-3 space-y-4">
+            {building.faces.length === 0 ? (
+              <div className="bg-gray-50 rounded-lg border border-border p-8 text-center">
+                <p className="text-text-muted">左側で面を追加すると、見積もり結果がここに表示されます</p>
+              </div>
+            ) : (<>
             {/* Feasibility */}
             <div
               className={`rounded-lg border p-4 ${overallBg[result.feasibility.overall]}`}
@@ -987,7 +992,7 @@ export default function EstimatePage() {
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <ScenarioCard
                   scenario={result.current}
-                  label="現状（Sugitec外注）"
+                  label="現状（解析外注）"
                 />
                 <ScenarioCard
                   scenario={result.future}
@@ -1015,6 +1020,7 @@ export default function EstimatePage() {
               </h3>
               <ComparisonBar result={result} />
             </div>
+            </>)}
           </div>
         </div>
       </main>

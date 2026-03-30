@@ -132,7 +132,7 @@ export interface EstimateResult {
   droneArea: number;
   groundIRArea: number;
   ropeAccessArea: number;
-  current: ScenarioResult;  // 現状（Sugitec外注）
+  current: ScenarioResult;  // 現状（解析外注）
   future: ScenarioResult;   // 将来（自社化後）
   comparison: ComparisonResult;
 }
@@ -165,12 +165,12 @@ export const DEFAULT_CONFIG: CostConfig = {
     misc: 5000,
   },
   irAnalysis: {
-    outsourceCostPerM2: 120,   // Sugitec外注
+    outsourceCostPerM2: 120,   // 解析外注
     internalCostPerM2: 60,     // 自社実施
   },
   transportationPerDay: 8000,  // 熊谷→都心部往復（倉田さん: 片道3,000-5,000円）
   adminRatePercent: 20,
-  unitPricePerM2: 200,
+  unitPricePerM2: 280,
   ropeAccessPricePerM2: 500,
   ropeAccessPercussionPerM2: 300,
 };
@@ -244,8 +244,8 @@ export const PRESETS: BuildingPreset[] = [
     ],
   },
   {
-    name: "東劇ビル",
-    label: "東劇ビル (~10,000m2)",
+    name: "複合用途ビル",
+    label: "複合用途ビル (~10,000m2)",
     totalArea: 10000,
     floors: 12,
     height: 45,
@@ -261,7 +261,7 @@ export const PRESETS: BuildingPreset[] = [
         ...createDefaultFace("東面", 1500),
         accessLevel: "no-drone" as AccessLevel,
         inspectionMethod: "percussion" as InspectionMethod,
-        note: "メルキー通りに面しているためドローン不可",
+        note: "幹線道路に面しているためドローン不可",
         ropeAccessArea: 1500,
       },
       {
@@ -502,9 +502,10 @@ export function calculateEstimate(
   const faceResults: FaceResult[] = building.faces.map((face) => {
     const isDrone =
       face.accessLevel === "free-drone" || face.accessLevel === "line-drone";
-    const fDroneArea = isDrone ? face.area - face.groundIRArea : 0;
+    const clampedGroundIR = Math.min(face.groundIRArea, face.area);
+    const fDroneArea = isDrone ? face.area - clampedGroundIR : 0;
     const fRopeArea =
-      face.accessLevel === "no-drone" ? face.ropeAccessArea || face.area : 0;
+      face.accessLevel === "no-drone" ? Math.min(face.ropeAccessArea || face.area, face.area) : 0;
 
     return {
       name: face.name,
@@ -514,7 +515,7 @@ export function calculateEstimate(
       note: face.note,
       pattern: classifyFacePattern(face),
       droneArea: Math.max(0, fDroneArea),
-      groundIRArea: face.groundIRArea,
+      groundIRArea: clampedGroundIR,
       ropeAccessArea: fRopeArea,
     };
   });
@@ -543,7 +544,7 @@ export function calculateEstimate(
 
   // Two scenarios
   const current = calculateScenario(
-    "現状（Sugitec外注）",
+    "現状（解析外注）",
     "outsource",
     building,
     config,
