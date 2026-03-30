@@ -143,12 +143,13 @@ function ComparisonBar({ result }: { result: EstimateResult }) {
 
 // --- Scenario Card (Left=原価, Right=見積もり) ---
 
-function ScenarioCard({ scenario, label }: { scenario: ScenarioResult; label: string }) {
+function ScenarioCard({ scenario, label, showCost }: { scenario: ScenarioResult; label: string; showCost: boolean }) {
   return (
     <div className="bg-white rounded-lg border border-border p-4">
       <h3 className="text-sm font-bold text-text-secondary mb-3">{label}</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left: 原価内訳 */}
+      <div className={`grid grid-cols-1 ${showCost ? "md:grid-cols-2" : ""} gap-4`}>
+        {/* Left: 原価内訳（社内モードのみ） */}
+        {showCost && (
         <div>
           <h4 className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">
             原価内訳
@@ -166,6 +167,7 @@ function ScenarioCard({ scenario, label }: { scenario: ScenarioResult; label: st
             </tbody>
           </table>
         </div>
+        )}
 
         {/* Right: お客様向け見積もり */}
         <div>
@@ -190,7 +192,8 @@ function ScenarioCard({ scenario, label }: { scenario: ScenarioResult; label: st
             </tbody>
           </table>
 
-          {/* Profit summary */}
+          {/* Profit summary (社内モードのみ) */}
+          {showCost && (
           <div className="mt-3 pt-3 border-t border-border">
             <div className="flex justify-between text-sm">
               <span>粗利</span>
@@ -205,6 +208,7 @@ function ScenarioCard({ scenario, label }: { scenario: ScenarioResult; label: st
               </span>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>
@@ -570,7 +574,7 @@ function ConfigEditor({
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               <NumField
-                label="外注解析（Sugitec）"
+                label="外注解析"
                 value={config.irAnalysis.outsourceCostPerM2}
                 onChangeVal={(v) => updateIR("outsourceCostPerM2", v)}
                 unit="円/m2"
@@ -670,6 +674,7 @@ export default function EstimatePage() {
   });
 
   const [config, setConfig] = useState<CostConfig>({ ...DEFAULT_CONFIG });
+  const [showCost, setShowCost] = useState(true);
 
   const result = useMemo(
     () => calculateEstimate(building, config),
@@ -745,12 +750,20 @@ export default function EstimatePage() {
               ドローン外壁調査の概算見積もりを即時算出
             </p>
           </div>
-          <a
-            href="#results"
-            className="lg:hidden text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full transition-colors"
-          >
-            結果を見る
-          </a>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowCost(!showCost)}
+              className={`text-xs px-3 py-1.5 rounded-full transition-colors ${showCost ? "bg-white/30 text-white" : "bg-white/10 text-white/60"}`}
+            >
+              {showCost ? "社内モード" : "顧客モード"}
+            </button>
+            <a
+              href="#results"
+              className="lg:hidden text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full transition-colors"
+            >
+              結果を見る
+            </a>
+          </div>
         </div>
       </header>
 
@@ -790,7 +803,7 @@ export default function EstimatePage() {
                     onChange={(e) =>
                       setBuilding({ ...building, name: e.target.value })
                     }
-                    placeholder="例: 東劇ビル"
+                    placeholder="例: 新宿オフィスビル"
                     className="w-full border border-border rounded px-3 py-2 text-sm"
                   />
                 </div>
@@ -895,6 +908,11 @@ export default function EstimatePage() {
 
           {/* Right: Results */}
           <div id="results" className="lg:col-span-3 space-y-4">
+            {building.faces.length === 0 ? (
+              <div className="bg-gray-50 rounded-lg border border-border p-8 text-center">
+                <p className="text-text-muted">左側で面を追加すると、見積もり結果がここに表示されます</p>
+              </div>
+            ) : (<>
             {/* Feasibility */}
             <div
               className={`rounded-lg border p-4 ${overallBg[result.feasibility.overall]}`}
@@ -918,13 +936,14 @@ export default function EstimatePage() {
             </div>
 
             {/* Key Metrics (Current scenario) */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className={`grid grid-cols-2 ${showCost ? "md:grid-cols-4" : ""} gap-3`}>
               <StatCard
                 label="見積もり価格"
                 value={yen(result.current.salesPrice)}
                 sub={`${result.current.perM2.sales} 円/m2`}
                 color="text-primary"
               />
+              {showCost && (<>
               <StatCard
                 label="原価（外注時）"
                 value={yen(result.current.costBreakdown.totalCost)}
@@ -947,6 +966,12 @@ export default function EstimatePage() {
                     ? "text-positive"
                     : "text-negative"
                 }
+              />
+              </>)}
+              <StatCard
+                label="調査日数"
+                value={`${result.surveyDays}日`}
+                color="text-text-secondary"
               />
             </div>
 
@@ -987,11 +1012,13 @@ export default function EstimatePage() {
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <ScenarioCard
                   scenario={result.current}
-                  label="現状（Sugitec外注）"
+                  label="現状（解析外注）"
+                  showCost={showCost}
                 />
                 <ScenarioCard
                   scenario={result.future}
                   label="将来（自社化後）"
+                  showCost={showCost}
                 />
               </div>
 
@@ -1015,6 +1042,7 @@ export default function EstimatePage() {
               </h3>
               <ComparisonBar result={result} />
             </div>
+            </>)}
           </div>
         </div>
       </main>
