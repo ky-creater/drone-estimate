@@ -275,6 +275,7 @@ function FaceEditor({
   onChange: (index: number, face: FaceInput) => void;
   onRemove: (index: number) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const update = (patch: Partial<FaceInput>) => {
     onChange(index, { ...face, ...patch });
   };
@@ -283,137 +284,124 @@ function FaceEditor({
 
   return (
     <div className={`border rounded-lg p-3 ${access.bg}`}>
-      <div className="flex justify-between items-center mb-2">
-        <div className="flex items-center gap-2">
-          <span className={`text-xl font-bold ${access.color}`}>
-            {access.symbol}
-          </span>
-          <input
-            type="text"
-            value={face.name}
-            onChange={(e) => update({ name: e.target.value })}
-            className="font-bold text-sm bg-transparent border-b border-transparent hover:border-border focus:border-accent focus:outline-none px-1 py-0.5"
-          />
-        </div>
-        <button
-          onClick={() => onRemove(index)}
-          className="text-xs text-text-muted hover:text-negative"
+      {/* Row 1: 面名 + 面積 + ドローン可否 + 削除 */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`text-lg font-bold ${access.color} shrink-0`}>
+          {access.symbol}
+        </span>
+        <input
+          type="text"
+          value={face.name}
+          onChange={(e) => update({ name: e.target.value })}
+          className="font-bold text-sm bg-transparent border-b border-transparent hover:border-border focus:border-accent focus:outline-none px-1 py-0.5 w-16"
+        />
+        <input
+          type="number"
+          value={face.area || ""}
+          onChange={(e) => {
+            const area = Number(e.target.value) || 0;
+            const patch: Partial<FaceInput> = { area };
+            if (face.accessLevel === "no-drone") {
+              patch.ropeAccessArea = area;
+            }
+            update(patch);
+          }}
+          className="w-20 border border-border rounded px-2 py-1 text-sm bg-white"
+          placeholder="面積"
+        />
+        <span className="text-xs text-text-muted">m2</span>
+        <select
+          value={face.accessLevel}
+          onChange={(e) => {
+            const level = e.target.value as AccessLevel;
+            const patch: Partial<FaceInput> = { accessLevel: level };
+            if (level === "no-drone") {
+              patch.inspectionMethod = "percussion";
+              patch.ropeAccessArea = face.area;
+            } else {
+              patch.inspectionMethod = "infrared";
+              patch.ropeAccessArea = 0;
+            }
+            update(patch);
+          }}
+          className="text-xs border border-border rounded px-1 py-1 bg-white"
         >
-          削除
-        </button>
-      </div>
-
-      {/* Access Level Radio */}
-      <div className="flex flex-wrap gap-2 mb-2">
-        {(["free-drone", "line-drone", "no-drone"] as AccessLevel[]).map((level) => {
-          const opt = ACCESS_LABELS[level];
-          return (
-            <label
-              key={level}
-              className={`flex items-center gap-1 text-xs cursor-pointer px-2 py-1 rounded border ${
-                face.accessLevel === level
-                  ? `${opt.bg} font-bold`
-                  : "bg-white border-border"
-              }`}
-            >
-              <input
-                type="radio"
-                name={`access-${index}`}
-                checked={face.accessLevel === level}
-                onChange={() => {
-                  const patch: Partial<FaceInput> = { accessLevel: level };
-                  if (level === "no-drone") {
-                    patch.inspectionMethod = "percussion";
-                    patch.ropeAccessArea = face.area;
-                  } else {
-                    patch.inspectionMethod = "infrared";
-                    patch.ropeAccessArea = 0;
-                  }
-                  update(patch);
-                }}
-                className="hidden"
-              />
-              <span className={opt.color}>{opt.symbol}</span> {opt.label}
-            </label>
-          );
-        })}
-      </div>
-
-      {/* Inspection Method + Area */}
-      <div className="grid grid-cols-2 gap-2 text-sm mb-2">
-        <div>
-          <label className="text-xs text-text-muted">面積 (m2)</label>
-          <input
-            type="number"
-            value={face.area || ""}
-            onChange={(e) => {
-              const area = Number(e.target.value) || 0;
-              const patch: Partial<FaceInput> = { area };
-              if (face.accessLevel === "no-drone") {
-                patch.ropeAccessArea = area;
-              }
-              update(patch);
-            }}
-            className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-text-muted">検査方法</label>
-          <select
-            value={face.inspectionMethod}
-            onChange={(e) =>
-              update({ inspectionMethod: e.target.value as InspectionMethod })
-            }
-            className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
+          <option value="free-drone">ドローン可</option>
+          <option value="line-drone">ライン式</option>
+          <option value="no-drone">不可</option>
+        </select>
+        <div className="flex items-center gap-1 ml-auto shrink-0">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-text-muted hover:text-accent"
+            title="詳細設定"
           >
-            <option value="infrared">赤外線</option>
-            <option value="percussion">打診</option>
-            <option value="visual">目視</option>
-          </select>
+            {expanded ? "閉じる" : "詳細"}
+          </button>
+          <button
+            onClick={() => onRemove(index)}
+            className="text-xs text-text-muted hover:text-negative"
+          >
+            削除
+          </button>
         </div>
       </div>
 
-      {/* Ground IR + Rope Access */}
-      <div className="grid grid-cols-2 gap-2 text-sm mb-2">
-        <div>
-          <label className="text-xs text-text-muted">地上IR面積 (m2)</label>
-          <input
-            type="number"
-            value={face.groundIRArea || ""}
-            onChange={(e) =>
-              update({ groundIRArea: Number(e.target.value) || 0 })
-            }
-            className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
-          />
-        </div>
-        {face.accessLevel === "no-drone" && (
-          <div>
-            <label className="text-xs text-text-muted">
-              ロープアクセス面積 (m2)
-            </label>
+      {/* Expanded: 詳細設定 */}
+      {expanded && (
+        <div className="mt-2 pt-2 border-t border-border/50 space-y-2">
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <label className="text-xs text-text-muted">検査方法</label>
+              <select
+                value={face.inspectionMethod}
+                onChange={(e) =>
+                  update({ inspectionMethod: e.target.value as InspectionMethod })
+                }
+                className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
+              >
+                <option value="infrared">赤外線</option>
+                <option value="percussion">打診</option>
+                <option value="visual">目視</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-text-muted">地上IR面積 (m2)</label>
+              <input
+                type="number"
+                value={face.groundIRArea || ""}
+                onChange={(e) =>
+                  update({ groundIRArea: Number(e.target.value) || 0 })
+                }
+                className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
+              />
+            </div>
+          </div>
+          {face.accessLevel === "no-drone" && (
+            <div className="text-sm">
+              <label className="text-xs text-text-muted">ロープアクセス面積 (m2)</label>
+              <input
+                type="number"
+                value={face.ropeAccessArea || ""}
+                onChange={(e) =>
+                  update({ ropeAccessArea: Number(e.target.value) || 0 })
+                }
+                className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
+              />
+            </div>
+          )}
+          <div className="text-sm">
+            <label className="text-xs text-text-muted">注記</label>
             <input
-              type="number"
-              value={face.ropeAccessArea || ""}
-              onChange={(e) =>
-                update({ ropeAccessArea: Number(e.target.value) || 0 })
-              }
+              type="text"
+              value={face.note}
+              onChange={(e) => update({ note: e.target.value })}
+              placeholder="例: 大通りに面しているためドローン不可"
               className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
             />
           </div>
-        )}
-      </div>
-
-      {/* Note */}
-      <div className="text-sm">
-        <label className="text-xs text-text-muted">注記</label>
-        <input
-          type="text"
-          value={face.note}
-          onChange={(e) => update({ note: e.target.value })}
-          placeholder="例: 大通りに面しているためドローン不可"
-          className="w-full border border-border rounded px-2 py-1 text-sm bg-white"
-        />
-      </div>
+        </div>
+      )}
     </div>
   );
 }
