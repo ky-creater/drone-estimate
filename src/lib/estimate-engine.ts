@@ -279,6 +279,36 @@ export const PRESETS: BuildingPreset[] = [
       },
     ],
   },
+  {
+    name: "マンション",
+    label: "マンション (6,000m2)",
+    totalArea: 6000,
+    floors: 14,
+    height: 42,
+    faces: [
+      createDefaultFace("北面", 1800),
+      createDefaultFace("東面", 1200),
+      {
+        ...createDefaultFace("南面", 1800),
+        note: "バルコニー面（低層部は地上IR）",
+        groundIRArea: 400,
+      },
+      createDefaultFace("西面", 1200),
+    ],
+  },
+  {
+    name: "物流倉庫",
+    label: "物流倉庫 (4,000m2)",
+    totalArea: 4000,
+    floors: 2,
+    height: 12,
+    faces: [
+      createDefaultFace("北面", 800),
+      createDefaultFace("東面", 1200),
+      createDefaultFace("南面", 800),
+      createDefaultFace("西面", 1200),
+    ],
+  },
 ];
 
 // --- Feasibility Check ---

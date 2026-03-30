@@ -30,3 +30,12 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+@media print {
+  header, footer, .no-print { display: none !important; }
+  body { background: white !important; }
+  .print-only { display: block !important; }
+  .lg\:col-span-2 { display: none !important; }
+  .lg\:col-span-3 { grid-column: span 5 !important; }
+  .grid.grid-cols-1.lg\:grid-cols-5 { display: block !important; }
+}

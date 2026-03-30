@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   type BuildingInput,
   type FaceInput,
@@ -673,8 +673,22 @@ export default function EstimatePage() {
     ],
   });
 
-  const [config, setConfig] = useState<CostConfig>({ ...DEFAULT_CONFIG });
+  const [config, setConfig] = useState<CostConfig>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("drone-estimate-config");
+        if (saved) return JSON.parse(saved) as CostConfig;
+      } catch {}
+    }
+    return { ...DEFAULT_CONFIG };
+  });
   const [showCost, setShowCost] = useState(true);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("drone-estimate-config", JSON.stringify(config));
+    } catch {}
+  }, [config]);
 
   const result = useMemo(
     () => calculateEstimate(building, config),
@@ -1046,6 +1060,16 @@ export default function EstimatePage() {
           </div>
         </div>
       </main>
+
+      {/* Print Button */}
+      <div className="max-w-7xl mx-auto px-4 mt-4 no-print">
+        <button
+          onClick={() => window.print()}
+          className="text-sm px-4 py-2 border border-accent text-accent rounded hover:bg-accent hover:text-white transition-colors"
+        >
+          印刷 / PDF保存
+        </button>
+      </div>
 
       <footer className="border-t border-border mt-8 py-4">
         <p className="text-center text-xs text-text-muted">
