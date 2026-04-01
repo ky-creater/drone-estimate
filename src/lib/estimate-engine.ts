@@ -170,7 +170,7 @@ export const DEFAULT_CONFIG: CostConfig = {
   },
   transportationPerDay: 8000,  // 熊谷→都心部往復（倉田さん: 片道3,000-5,000円）
   adminRatePercent: 20,
-  unitPricePerM2: 210,
+  unitPricePerM2: 350,
   ropeAccessPricePerM2: 500,
   ropeAccessPercussionPerM2: 300,
 };

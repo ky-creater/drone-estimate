@@ -226,6 +226,34 @@ function CostRow({ label, value, bold }: { label: string; value: number; bold?: 
   );
 }
 
+// --- Collapsible Section ---
+
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-white rounded-lg border border-border">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+      >
+        <span className="text-sm font-bold text-text-secondary">{title}</span>
+        <span className={`text-xs text-text-muted transition-transform ${open ? "rotate-90" : ""}`}>
+          &#9654;
+        </span>
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+}
+
 // --- Face Summary Table ---
 
 function FaceSummaryTable({ result }: { result: EstimateResult }) {
@@ -288,10 +316,7 @@ function SensitivityTable({
   if (sensitivity.rows.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-lg border border-border p-4">
-      <h3 className="text-sm font-bold text-text-secondary mb-1">
-        感度分析
-      </h3>
+    <div>
       <p className="text-xs text-text-muted mb-3">
         販売単価とドローン適用面数による利益シミュレーション（現在の単価: {config.unitPricePerM2}円/m2）
       </p>
@@ -354,6 +379,7 @@ function SensitivityTable({
       </p>
     </div>
   );
+
 }
 
 // --- Face Editor ---
@@ -672,17 +698,21 @@ export default function EstimatePage() {
     if (typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem("drone-estimate-config");
-        if (saved) return JSON.parse(saved) as CostConfig;
+        const ver = localStorage.getItem("drone-estimate-config-ver");
+        if (saved && ver === "3") return JSON.parse(saved) as CostConfig;
+        // Clear outdated config (e.g. old 210 yen default)
+        localStorage.removeItem("drone-estimate-config");
       } catch {}
     }
     return { ...DEFAULT_CONFIG };
   });
-  const [showCost, setShowCost] = useState(true);
+  const [showCost, setShowCost] = useState(false);
   const [showFaces, setShowFaces] = useState(false);
 
   useEffect(() => {
     try {
       localStorage.setItem("drone-estimate-config", JSON.stringify(config));
+      localStorage.setItem("drone-estimate-config-ver", "3");
     } catch {}
   }, [config]);
 
@@ -763,7 +793,7 @@ export default function EstimatePage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowCost(!showCost)}
-              className={`text-xs px-3 py-1.5 rounded-full transition-colors ${showCost ? "bg-white/30 text-white" : "bg-white/10 text-white/60"}`}
+              className={`text-xs px-3 py-1.5 rounded-full transition-colors ${showCost ? "bg-yellow-400 text-gray-900 font-bold" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
             >
               {showCost ? "社内モード" : "顧客モード"}
             </button>
@@ -952,109 +982,112 @@ export default function EstimatePage() {
                 <p className="text-text-muted">左側で面を追加すると、見積もり結果がここに表示されます</p>
               </div>
             ) : (<>
-            {/* Feasibility */}
-            <div
-              className={`rounded-lg border p-4 ${overallBg[result.feasibility.overall]}`}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <h2 className="text-sm font-bold">飛行可否判定</h2>
-                <FeasibilityBadge level={result.feasibility.overall} />
-                <span className="text-sm font-bold">
-                  {overallLabel[result.feasibility.overall]}
-                </span>
+            {/* Hero: 見積金額 + 飛行可否バッジ */}
+            <div className="bg-white rounded-xl border-2 border-accent/30 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-text-muted">飛行可否:</span>
+                  <FeasibilityBadge level={result.feasibility.overall} />
+                  <span className="text-sm font-medium">
+                    {overallLabel[result.feasibility.overall]}
+                  </span>
+                </div>
+                <div className="text-sm text-text-muted">
+                  調査日数: <span className="font-bold text-text-primary">{result.surveyDays}日</span>
+                </div>
               </div>
-              <FeasibilityPanel items={result.feasibility.items} />
+              <div className="text-center">
+                <div className="text-sm text-text-muted mb-1">ドローン外壁調査 概算見積</div>
+                <div className="text-4xl font-bold text-primary tracking-tight">
+                  {result.current.salesPrice.toLocaleString("ja-JP")}
+                  <span className="text-lg ml-1">円</span>
+                </div>
+                <div className="text-sm text-text-muted mt-1">
+                  {result.current.perM2.sales} 円/m2 | 総面積 {building.totalArea.toLocaleString()} m2
+                </div>
+              </div>
+
+              {/* 社内メトリクス（社内モードのみ） */}
+              {showCost && (
+                <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-border">
+                  <div className="text-center">
+                    <div className="text-xs text-text-muted">原価</div>
+                    <div className="text-sm font-bold">{yen(result.current.costBreakdown.totalCost)}</div>
+                    <div className="text-xs text-text-muted">{result.current.perM2.cost} 円/m2</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-text-muted">粗利</div>
+                    <div className={`text-sm font-bold ${result.current.profit >= 0 ? "text-positive" : "text-negative"}`}>
+                      {yen(result.current.profit)}
+                    </div>
+                    <div className="text-xs text-text-muted">{result.current.perM2.profit} 円/m2</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-text-muted">粗利率</div>
+                    <div className={`text-sm font-bold ${result.current.profitRate >= 0 ? "text-positive" : "text-negative"}`}>
+                      {pct(result.current.profitRate)}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Face Summary with ○△× */}
-            <div className="bg-white rounded-lg border border-border p-4">
-              <h3 className="text-sm font-bold text-text-secondary mb-3">
-                各面の判定サマリ
+            {/* ロープアクセスとの比較 — お得感を前面に */}
+            <div className="bg-gradient-to-r from-blue-50 to-green-50 rounded-xl border border-accent/20 p-5">
+              <h3 className="text-sm font-bold text-text-secondary mb-1">
+                従来工法（ロープアクセス）との比較
               </h3>
+              <p className="text-xs text-text-muted mb-4">全面をロープアクセスで実施した場合との価格差</p>
+              <ComparisonBar result={result} />
+            </div>
+
+            {/* 面積内訳 — コンパクトに */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-lg border border-border p-3 text-center">
+                <div className="text-xs text-text-muted">ドローン調査</div>
+                <div className="text-lg font-bold text-accent">
+                  {result.droneArea.toLocaleString()} <span className="text-xs font-normal">m2</span>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg border border-border p-3 text-center">
+                <div className="text-xs text-text-muted">地上IR調査</div>
+                <div className="text-lg font-bold text-positive">
+                  {result.groundIRArea.toLocaleString()} <span className="text-xs font-normal">m2</span>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg border border-border p-3 text-center">
+                <div className="text-xs text-text-muted">ロープアクセス</div>
+                <div className="text-lg font-bold text-negative">
+                  {result.ropeAccessArea.toLocaleString()} <span className="text-xs font-normal">m2</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 飛行可否の詳細（警告がある場合のみ展開表示） */}
+            {result.feasibility.overall !== "ok" && (
+              <div className={`rounded-lg border p-4 ${overallBg[result.feasibility.overall]}`}>
+                <FeasibilityPanel items={result.feasibility.items} />
+              </div>
+            )}
+
+            {/* 折りたたみ: 各面の判定サマリ */}
+            <CollapsibleSection title="各面の判定サマリ" defaultOpen={false}>
               <FaceSummaryTable result={result} />
-            </div>
+            </CollapsibleSection>
 
-            {/* Key Metrics (Current scenario) */}
-            <div className={`grid grid-cols-2 ${showCost ? "md:grid-cols-4" : ""} gap-3`}>
-              <StatCard
-                label="見積もり価格"
-                value={yen(result.current.salesPrice)}
-                sub={`${result.current.perM2.sales} 円/m2`}
-                color="text-primary"
-              />
-              {showCost && (<>
-              <StatCard
-                label="原価（外注時）"
-                value={yen(result.current.costBreakdown.totalCost)}
-                sub={`${result.current.perM2.cost} 円/m2`}
-              />
-              <StatCard
-                label="粗利（外注時）"
-                value={yen(result.current.profit)}
-                sub={`${result.current.perM2.profit} 円/m2`}
-                color={
-                  result.current.profit >= 0 ? "text-positive" : "text-negative"
-                }
-              />
-              <StatCard
-                label="粗利率（外注時）"
-                value={pct(result.current.profitRate)}
-                sub={`調査日数: ${result.surveyDays}日`}
-                color={
-                  result.current.profitRate >= 0
-                    ? "text-positive"
-                    : "text-negative"
-                }
-              />
-              </>)}
-              <StatCard
-                label="調査日数"
-                value={`${result.surveyDays}日`}
-                color="text-text-secondary"
-              />
-            </div>
+            {/* 折りたたみ: 感度分析（社内モードのみ） */}
+            {showCost && (
+              <CollapsibleSection title="感度分析（単価 x ドローン適用面数）" defaultOpen={false}>
+                <SensitivityTable
+                  building={building}
+                  config={config}
+                  showCost={showCost}
+                />
+              </CollapsibleSection>
+            )}
 
-            {/* Area Breakdown */}
-            <div className="bg-white rounded-lg border border-border p-4">
-              <h3 className="text-sm font-bold text-text-secondary mb-3">
-                面積内訳
-              </h3>
-              <div className="grid grid-cols-3 gap-3 text-center text-sm">
-                <div className="bg-blue-50 rounded p-2">
-                  <div className="text-xs text-text-muted">ドローン調査</div>
-                  <div className="font-bold text-accent">
-                    {result.droneArea.toLocaleString()} m2
-                  </div>
-                </div>
-                <div className="bg-green-50 rounded p-2">
-                  <div className="text-xs text-text-muted">地上IR調査</div>
-                  <div className="font-bold text-positive">
-                    {result.groundIRArea.toLocaleString()} m2
-                  </div>
-                </div>
-                <div className="bg-red-50 rounded p-2">
-                  <div className="text-xs text-text-muted">
-                    ロープアクセス
-                  </div>
-                  <div className="font-bold text-negative">
-                    {result.ropeAccessArea.toLocaleString()} m2
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sensitivity Analysis */}
-            <SensitivityTable
-              building={building}
-              config={config}
-              showCost={showCost}
-            />
-
-            {/* Two-Scenario Comparison */}
-            <div>
-              <h3 className="text-sm font-bold text-text-secondary mb-3">
-                シナリオ比較
-              </h3>
+            {/* 折りたたみ: シナリオ比較 */}
+            <CollapsibleSection title="シナリオ比較（外注 vs 自社化）" defaultOpen={false}>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <ScenarioCard
                   scenario={result.current}
@@ -1067,8 +1100,6 @@ export default function EstimatePage() {
                   showCost={showCost}
                 />
               </div>
-
-              {/* Improvement indicator */}
               {result.future.profit > result.current.profit && (
                 <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-center">
                   <span className="font-bold text-positive">
@@ -1079,15 +1110,7 @@ export default function EstimatePage() {
                   {pct(result.future.profitRate)}）
                 </div>
               )}
-            </div>
-
-            {/* Comparison with rope access */}
-            <div className="bg-white rounded-lg border border-border p-4">
-              <h3 className="text-sm font-bold text-text-secondary mb-3">
-                ロープアクセスとの比較（全面ロープの場合）
-              </h3>
-              <ComparisonBar result={result} />
-            </div>
+            </CollapsibleSection>
             </>)}
           </div>
         </div>
