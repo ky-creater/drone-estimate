@@ -102,14 +102,29 @@ function FutureRow({
   current,
   value,
   onChange,
+  percentMode,
 }: {
   label: string;
   unit: string;
   current: number;
   value: number;
   onChange: (v: number) => void;
+  percentMode: boolean;
 }) {
   const changed = value !== current;
+  const pct = current > 0 ? Math.round((value / current) * 100) : 100;
+  const diffPct = pct - 100;
+
+  const handleChange = (raw: number) => {
+    if (percentMode) {
+      onChange(Math.round(current * raw / 100));
+    } else {
+      onChange(raw);
+    }
+  };
+
+  const displayValue = percentMode ? pct : value;
+
   return (
     <div className="grid grid-cols-[1fr_5rem_5rem] items-center gap-2 text-sm">
       <span className="text-text-primary">
@@ -117,16 +132,28 @@ function FutureRow({
         <span className="text-xs text-text-muted ml-1">{unit}</span>
       </span>
       <span className="text-right text-text-muted tabular-nums">{current.toLocaleString()}</span>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value) || 0)}
-        className={`w-full border rounded px-1.5 py-0.5 text-sm text-right tabular-nums ${
-          changed
-            ? "border-green-400 bg-green-50 font-medium text-green-800"
-            : "border-gray-200 bg-white"
-        }`}
-      />
+      <div className="flex flex-col items-end gap-0.5">
+        <input
+          type="number"
+          value={displayValue}
+          onChange={(e) => handleChange(Number(e.target.value) || 0)}
+          className={`w-full border rounded px-1.5 py-0.5 text-sm text-right tabular-nums ${
+            changed
+              ? "border-green-400 bg-green-50 font-medium text-green-800"
+              : "border-gray-200 bg-white"
+          }`}
+        />
+        {changed && !percentMode && (
+          <span className={`text-xs tabular-nums ${diffPct < 0 ? "text-positive" : "text-negative"}`}>
+            {diffPct > 0 ? "+" : ""}{diffPct}%
+          </span>
+        )}
+        {changed && percentMode && (
+          <span className="text-xs text-text-muted tabular-nums">
+            {value.toLocaleString()}{unit.split("/")[0].replace(/[^円a-z]/gi, "").trim() || "円"}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -845,6 +872,7 @@ export default function EstimatePage() {
   }, [config]);
 
   const [futureOverrides, setFutureOverrides] = useState<FutureOverrides>({ ...DEFAULT_FUTURE_OVERRIDES });
+  const [futurePercentMode, setFuturePercentMode] = useState(false);
 
   const result = useMemo(
     () => calculateEstimate(building, config, futureOverrides),
@@ -1106,44 +1134,86 @@ export default function EstimatePage() {
             <div className="bg-white rounded-lg border-2 border-green-200 p-4">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-bold text-green-700">Step 3: 自社化シミュレーション</h3>
-                <button
-                  onClick={() => setFutureOverrides({ ...DEFAULT_FUTURE_OVERRIDES })}
-                  className="text-xs text-text-muted hover:text-text-primary"
-                >
-                  リセット
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded border border-gray-200 text-xs overflow-hidden">
+                    <button
+                      onClick={() => setFuturePercentMode(false)}
+                      className={`px-2 py-0.5 ${!futurePercentMode ? "bg-green-600 text-white" : "text-text-muted hover:bg-gray-50"}`}
+                    >値</button>
+                    <button
+                      onClick={() => setFuturePercentMode(true)}
+                      className={`px-2 py-0.5 ${futurePercentMode ? "bg-green-600 text-white" : "text-text-muted hover:bg-gray-50"}`}
+                    >%</button>
+                  </div>
+                  <button
+                    onClick={() => setFutureOverrides({ ...DEFAULT_FUTURE_OVERRIDES })}
+                    className="text-xs text-text-muted hover:text-text-primary"
+                  >リセット</button>
+                </div>
               </div>
               <p className="text-xs text-text-muted mb-3">「将来（自社化後）」シナリオのコストを直接編集</p>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <div className="grid grid-cols-[1fr_5rem_5rem] gap-2 text-xs text-text-muted pb-1 border-b border-gray-100">
                   <span>項目</span>
                   <span className="text-right">現状</span>
-                  <span className="text-right">将来</span>
+                  <span className="text-right">{futurePercentMode ? "将来(%)" : "将来"}</span>
                 </div>
-                <FutureRow
-                  label="赤外線解析" unit="円/m2"
+
+                {/* 解析費 */}
+                <p className="text-xs font-medium text-text-muted pt-1">解析費</p>
+                <FutureRow label="赤外線解析" unit="円/m2" percentMode={futurePercentMode}
                   current={config.irAnalysis.outsourceCostPerM2}
                   value={futureOverrides.irAnalysisCostPerM2}
-                  onChange={(v) => setFutureOverrides({ ...futureOverrides, irAnalysisCostPerM2: v })}
-                />
-                <FutureRow
-                  label="パイロット" unit="円/日"
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, irAnalysisCostPerM2: v })} />
+
+                {/* 人件費 */}
+                <p className="text-xs font-medium text-text-muted pt-1">人件費（日額）</p>
+                <FutureRow label="現場責任者" unit="円/日" percentMode={futurePercentMode}
+                  current={config.personnelDetail.siteManager}
+                  value={futureOverrides.siteManagerCost}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, siteManagerCost: v })} />
+                <FutureRow label="パイロット" unit="円/日" percentMode={futurePercentMode}
                   current={config.personnelDetail.pilot}
                   value={futureOverrides.pilotCost}
-                  onChange={(v) => setFutureOverrides({ ...futureOverrides, pilotCost: v })}
-                />
-                <FutureRow
-                  label="ドローン機材" unit="円/日"
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, pilotCost: v })} />
+                <FutureRow label="撮影士" unit="円/日" percentMode={futurePercentMode}
+                  current={config.personnelDetail.photographer}
+                  value={futureOverrides.photographerCost}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, photographerCost: v })} />
+                <FutureRow label="撮影助手" unit="円/日" percentMode={futurePercentMode}
+                  current={config.personnelDetail.assistantOrTechB}
+                  value={futureOverrides.assistantCost}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, assistantCost: v })} />
+
+                {/* 機材費 */}
+                <p className="text-xs font-medium text-text-muted pt-1">機材費（日額）</p>
+                <FutureRow label="ドローン" unit="円/日" percentMode={futurePercentMode}
                   current={config.equipment.drone}
                   value={futureOverrides.droneCost}
-                  onChange={(v) => setFutureOverrides({ ...futureOverrides, droneCost: v })}
-                />
-                <FutureRow
-                  label="IRカメラ" unit="円/日"
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, droneCost: v })} />
+                <FutureRow label="IRカメラ" unit="円/日" percentMode={futurePercentMode}
                   current={config.equipment.irCamera}
                   value={futureOverrides.irCameraCost}
-                  onChange={(v) => setFutureOverrides({ ...futureOverrides, irCameraCost: v })}
-                />
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, irCameraCost: v })} />
+                <FutureRow label="ラインドローンシステム" unit="円/日" percentMode={futurePercentMode}
+                  current={config.equipment.lineDroneSystem}
+                  value={futureOverrides.lineDroneSystemCost}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, lineDroneSystemCost: v })} />
+                <FutureRow label="その他機材" unit="円/日" percentMode={futurePercentMode}
+                  current={config.equipment.misc}
+                  value={futureOverrides.miscCost}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, miscCost: v })} />
+
+                {/* その他 */}
+                <p className="text-xs font-medium text-text-muted pt-1">その他</p>
+                <FutureRow label="交通費" unit="円/日" percentMode={futurePercentMode}
+                  current={config.transportationPerDay}
+                  value={futureOverrides.transportationPerDay}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, transportationPerDay: v })} />
+                <FutureRow label="ロープアクセス打診" unit="円/m2" percentMode={futurePercentMode}
+                  current={config.ropeAccessPercussionPerM2}
+                  value={futureOverrides.ropeAccessPercussionPerM2}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, ropeAccessPercussionPerM2: v })} />
               </div>
             </div>
           </div>

@@ -551,25 +551,59 @@ function calculateScenario(
 }
 
 export interface FutureOverrides {
-  irAnalysisCostPerM2: number;   // 将来の解析コスト/m2
-  pilotCost: number;             // 将来のパイロット日額
-  droneCost: number;             // 将来のドローン機材費/日
-  irCameraCost: number;          // 将来のIRカメラ機材費/日
+  // 解析費
+  irAnalysisCostPerM2: number;
+  // 人件費（日額）
+  siteManagerCost: number;
+  pilotCost: number;
+  photographerCost: number;
+  assistantCost: number;
+  // 機材費（日額）
+  droneCost: number;
+  irCameraCost: number;
+  lineDroneSystemCost: number;
+  miscCost: number;
+  // その他
+  transportationPerDay: number;
+  ropeAccessPercussionPerM2: number;
 }
 
 export const DEFAULT_FUTURE_OVERRIDES: FutureOverrides = {
-  irAnalysisCostPerM2: 60,
-  pilotCost: 35000,
-  droneCost: 5000,
-  irCameraCost: 2000,
+  irAnalysisCostPerM2: DEFAULT_CONFIG.irAnalysis.internalCostPerM2, // 60（内製化）
+  siteManagerCost: DEFAULT_CONFIG.personnelDetail.siteManager,
+  pilotCost: 35000,                                                  // 自社雇用想定
+  photographerCost: DEFAULT_CONFIG.personnelDetail.photographer,
+  assistantCost: DEFAULT_CONFIG.personnelDetail.assistantOrTechB,
+  droneCost: 5000,                                                   // 自社保有（減価償却）
+  irCameraCost: 2000,                                                // 自社保有（減価償却）
+  lineDroneSystemCost: DEFAULT_CONFIG.equipment.lineDroneSystem,
+  miscCost: DEFAULT_CONFIG.equipment.misc,
+  transportationPerDay: DEFAULT_CONFIG.transportationPerDay,
+  ropeAccessPercussionPerM2: DEFAULT_CONFIG.ropeAccessPercussionPerM2,
 };
 
 export function applyFutureOverrides(config: CostConfig, overrides: FutureOverrides): CostConfig {
   const c = JSON.parse(JSON.stringify(config)) as CostConfig;
-  c.personnelDetail = { ...c.personnelDetail, pilot: overrides.pilotCost };
-  c.teamCostPerDay = c.personnelDetail.siteManager + c.personnelDetail.pilot + c.personnelDetail.photographer + c.personnelDetail.assistantOrTechB * 2;
-  c.equipment = { ...c.equipment, drone: overrides.droneCost, irCamera: overrides.irCameraCost };
+  c.personnelDetail = {
+    siteManager: overrides.siteManagerCost,
+    pilot: overrides.pilotCost,
+    photographer: overrides.photographerCost,
+    assistantOrTechB: overrides.assistantCost,
+  };
+  c.teamCostPerDay =
+    c.personnelDetail.siteManager +
+    c.personnelDetail.pilot +
+    c.personnelDetail.photographer +
+    c.personnelDetail.assistantOrTechB * 2;
+  c.equipment = {
+    drone: overrides.droneCost,
+    irCamera: overrides.irCameraCost,
+    lineDroneSystem: overrides.lineDroneSystemCost,
+    misc: overrides.miscCost,
+  };
   c.irAnalysis = { ...c.irAnalysis, outsourceCostPerM2: overrides.irAnalysisCostPerM2 };
+  c.transportationPerDay = overrides.transportationPerDay;
+  c.ropeAccessPercussionPerM2 = overrides.ropeAccessPercussionPerM2;
   return c;
 }
 
