@@ -5,7 +5,7 @@
 
 // --- Input Types ---
 
-export type AccessLevel = "free-drone" | "line-drone" | "no-drone";
+export type AccessLevel = "drone-possible" | "drone-impossible";
 export type InspectionMethod = "infrared" | "percussion" | "visual";
 
 export interface BuildingInput {
@@ -19,7 +19,7 @@ export interface BuildingInput {
 export interface FaceInput {
   name: string;               // 面名 (北面、南面等)
   area: number;               // 面積 (m2)
-  accessLevel: AccessLevel;   // ○フリードローン / △ラインドローン / ×ドローン不可
+  accessLevel: AccessLevel;   // ○ラインドローンシステムで実施可能 / ×実施不可
   inspectionMethod: InspectionMethod; // 赤外線・打診・目視
   note: string;               // 注記欄
   ropeAccessArea: number;     // ロープアクセス対応面積 (no-drone時)
@@ -34,6 +34,7 @@ export interface EquipmentConfig {
   drone: number;
   irCamera: number;
   lineDroneSystem: number;
+  vehicle: number;              // 車両損料（日額）
   misc: number;
 }
 
@@ -100,8 +101,7 @@ export interface FaceResult {
 }
 
 export interface CustomerEstimate {
-  lineDroneIRFee: number;      // ラインドローン赤外線
-  freeDroneIRFee: number;      // フリードローン赤外線
+  droneIRFee: number;          // ドローン赤外線調査
   groundIRFee: number;         // 地上赤外線
   ropePercussionFee: number;   // ロープアクセス打診
   analysisFee: number;         // 解析費
@@ -163,7 +163,8 @@ export const DEFAULT_CONFIG: CostConfig = {
   equipment: {
     drone: 25000,              // ドローン機材損料（倉田さん回答: 約25,000円/日）
     irCamera: 10000,
-    lineDroneSystem: 0,        // 車両損料に含む（倉田さん: 積載物多く車両運搬）
+    lineDroneSystem: 0,        // ラインドローンシステム損料
+    vehicle: 0,                // 車両損料（要確認: 車両運搬費用）
     misc: 5000,
   },
   irAnalysis: {
@@ -181,7 +182,7 @@ export function createDefaultFace(name: string, area: number): FaceInput {
   return {
     name,
     area,
-    accessLevel: "free-drone",
+    accessLevel: "drone-possible",
     inspectionMethod: "infrared",
     note: "",
     ropeAccessArea: 0,
@@ -239,10 +240,7 @@ export const PRESETS: BuildingPreset[] = [
       createDefaultFace("北面", 4500),
       createDefaultFace("東面", 3000),
       createDefaultFace("南面", 4500),
-      {
-        ...createDefaultFace("西面", 3000),
-        accessLevel: "line-drone" as AccessLevel,
-      },
+      createDefaultFace("西面", 3000),
     ],
   },
   {
@@ -254,34 +252,34 @@ export const PRESETS: BuildingPreset[] = [
     faces: [
       {
         ...createDefaultFace("北面", 4000),
-        accessLevel: "no-drone" as AccessLevel,
+        accessLevel: "drone-impossible" as AccessLevel,
         inspectionMethod: "percussion" as InspectionMethod,
         note: "大通りに面しており飛行規制によりドローン不可",
         ropeAccessArea: 4000,
       },
       {
         ...createDefaultFace("東面", 3000),
-        accessLevel: "no-drone" as AccessLevel,
+        accessLevel: "drone-impossible" as AccessLevel,
         inspectionMethod: "percussion" as InspectionMethod,
         note: "離発着場所不明、机上判断不可",
         ropeAccessArea: 3000,
       },
       {
         ...createDefaultFace("南面", 4000),
-        accessLevel: "line-drone" as AccessLevel,
+        accessLevel: "drone-possible" as AccessLevel,
         inspectionMethod: "infrared" as InspectionMethod,
         note: "ラインドローンシステムでの赤外線調査が可能",
       },
       {
         ...createDefaultFace("西面", 3000),
-        accessLevel: "no-drone" as AccessLevel,
+        accessLevel: "drone-impossible" as AccessLevel,
         inspectionMethod: "percussion" as InspectionMethod,
         note: "離発着場所不明、机上判断不可",
         ropeAccessArea: 3000,
       },
       {
         ...createDefaultFace("低層部", 3000),
-        accessLevel: "free-drone" as AccessLevel,
+        accessLevel: "drone-possible" as AccessLevel,
         inspectionMethod: "infrared" as InspectionMethod,
         groundIRPossible: true,
         groundIRArea: 3000,
@@ -303,19 +301,6 @@ export const PRESETS: BuildingPreset[] = [
         note: "バルコニー面（低層部は地上IR）",
         groundIRArea: 400,
       },
-      createDefaultFace("西面", 1200),
-    ],
-  },
-  {
-    name: "物流倉庫",
-    label: "物流倉庫 (4,000m2)",
-    totalArea: 4000,
-    floors: 2,
-    height: 12,
-    faces: [
-      createDefaultFace("北面", 800),
-      createDefaultFace("東面", 1200),
-      createDefaultFace("南面", 800),
       createDefaultFace("西面", 1200),
     ],
   },
@@ -366,10 +351,10 @@ export function checkFeasibility(building: BuildingInput): FeasibilityCheck {
 
   // Accessible faces
   const droneFaces = building.faces.filter(
-    (f) => f.accessLevel === "free-drone" || f.accessLevel === "line-drone"
+    (f) => f.accessLevel === "drone-possible"
   );
   const noDroneFaces = building.faces.filter(
-    (f) => f.accessLevel === "no-drone"
+    (f) => f.accessLevel === "drone-impossible"
   );
 
   if (noDroneFaces.length > 0) {
@@ -392,14 +377,11 @@ export function checkFeasibility(building: BuildingInput): FeasibilityCheck {
     });
   }
 
-  // Line drone check
-  const lineDroneFaces = building.faces.filter(
-    (f) => f.accessLevel === "line-drone"
-  );
-  if (lineDroneFaces.length > 0) {
+  // Line drone system note
+  if (droneFaces.length > 0) {
     items.push({
-      level: "warning",
-      message: `${lineDroneFaces.map((f) => f.name).join("、")}でラインドローンシステムが必要 — 追加機材費が発生`,
+      level: "ok",
+      message: `${droneFaces.map((f) => f.name).join("、")}でラインドローンシステムによる調査が可能`,
     });
   }
 
@@ -425,16 +407,13 @@ export function checkFeasibility(building: BuildingInput): FeasibilityCheck {
 // --- Face pattern classification ---
 
 function classifyFacePattern(face: FaceInput): string {
-  if (face.accessLevel === "free-drone" && face.inspectionMethod === "infrared") {
-    return "フリードローン＋赤外線";
+  if (face.accessLevel === "drone-possible" && face.inspectionMethod === "infrared") {
+    return "ラインドローンシステム＋赤外線";
   }
-  if (face.accessLevel === "line-drone" && face.inspectionMethod === "infrared") {
-    return "ラインドローン＋赤外線";
-  }
-  if (face.accessLevel === "no-drone" && face.inspectionMethod === "percussion") {
+  if (face.accessLevel === "drone-impossible" && face.inspectionMethod === "percussion") {
     return "ロープアクセス＋打診";
   }
-  if (face.accessLevel === "no-drone" && face.inspectionMethod === "visual") {
+  if (face.accessLevel === "drone-impossible" && face.inspectionMethod === "visual") {
     return "目視検査";
   }
   if (face.groundIRPossible && face.groundIRArea > 0) {
@@ -445,10 +424,8 @@ function classifyFacePattern(face: FaceInput): string {
     : face.inspectionMethod === "percussion"
     ? "打診"
     : "目視";
-  const accessLabel = face.accessLevel === "free-drone"
-    ? "フリードローン"
-    : face.accessLevel === "line-drone"
-    ? "ラインドローン"
+  const accessLabel = face.accessLevel === "drone-possible"
+    ? "ラインドローンシステム"
     : "ロープアクセス";
   return `${accessLabel}＋${methodLabel}`;
 }
@@ -464,17 +441,17 @@ function calculateScenario(
   droneArea: number,
   groundIRArea: number,
   ropeAccessArea: number,
-  needsLineDrone: boolean
 ): ScenarioResult {
   // Personnel cost
   const personnelCost = config.teamCostPerDay * surveyDays;
 
-  // Equipment cost
+  // Equipment cost (ラインドローンシステム使用を前提)
   const dailyEquipment =
     config.equipment.drone +
     config.equipment.irCamera +
-    config.equipment.misc +
-    (needsLineDrone ? config.equipment.lineDroneSystem : 0);
+    config.equipment.lineDroneSystem +
+    config.equipment.vehicle +
+    config.equipment.misc;
   const equipmentCost = dailyEquipment * surveyDays;
 
   // IR analysis cost (only for drone-inspectable area)
@@ -509,24 +486,19 @@ function calculateScenario(
   };
 
   // Customer estimate breakdown
-  const lineDroneArea = building.faces
-    .filter((f) => f.accessLevel === "line-drone" && f.inspectionMethod === "infrared")
-    .reduce((sum, f) => sum + f.area - f.groundIRArea, 0);
-  const freeDroneArea = building.faces
-    .filter((f) => f.accessLevel === "free-drone" && f.inspectionMethod === "infrared")
+  const droneIRArea = building.faces
+    .filter((f) => f.accessLevel === "drone-possible" && f.inspectionMethod === "infrared")
     .reduce((sum, f) => sum + f.area - f.groundIRArea, 0);
 
   const customerEstimate: CustomerEstimate = {
-    lineDroneIRFee: lineDroneArea * config.unitPricePerM2,
-    freeDroneIRFee: freeDroneArea * config.unitPricePerM2,
+    droneIRFee: droneIRArea * config.unitPricePerM2,
     groundIRFee: groundIRArea * config.unitPricePerM2,
     ropePercussionFee: ropeAccessArea * config.ropeAccessPricePerM2,
     analysisFee: 0, // included in unit price
     totalEstimate: 0,
   };
   customerEstimate.totalEstimate =
-    customerEstimate.lineDroneIRFee +
-    customerEstimate.freeDroneIRFee +
+    customerEstimate.droneIRFee +
     customerEstimate.groundIRFee +
     customerEstimate.ropePercussionFee;
 
@@ -568,6 +540,7 @@ export interface FutureOverrides {
   droneCost: number;
   irCameraCost: number;
   lineDroneSystemCost: number;
+  vehicleCost: number;
   miscCost: number;
   // その他
   transportationPerDay: number;
@@ -583,6 +556,7 @@ export const DEFAULT_FUTURE_OVERRIDES: FutureOverrides = {
   droneCost: 5000,                                                   // 自社保有（減価償却）
   irCameraCost: 2000,                                                // 自社保有（減価償却）
   lineDroneSystemCost: DEFAULT_CONFIG.equipment.lineDroneSystem,
+  vehicleCost: DEFAULT_CONFIG.equipment.vehicle,
   miscCost: DEFAULT_CONFIG.equipment.misc,
   transportationPerDay: DEFAULT_CONFIG.transportationPerDay,
   ropeAccessPercussionPerM2: DEFAULT_CONFIG.ropeAccessPercussionPerM2,
@@ -605,6 +579,7 @@ export function applyFutureOverrides(config: CostConfig, overrides: FutureOverri
     drone: overrides.droneCost,
     irCamera: overrides.irCameraCost,
     lineDroneSystem: overrides.lineDroneSystemCost,
+    vehicle: overrides.vehicleCost,
     misc: overrides.miscCost,
   };
   c.irAnalysis = { ...c.irAnalysis, outsourceCostPerM2: overrides.irAnalysisCostPerM2 };
@@ -622,12 +597,11 @@ export function calculateEstimate(
 
   // Face results
   const faceResults: FaceResult[] = building.faces.map((face) => {
-    const isDrone =
-      face.accessLevel === "free-drone" || face.accessLevel === "line-drone";
+    const isDrone = face.accessLevel === "drone-possible";
     const clampedGroundIR = Math.min(face.groundIRArea, face.area);
     const fDroneArea = isDrone ? face.area - clampedGroundIR : 0;
     const fRopeArea =
-      face.accessLevel === "no-drone" ? Math.min(face.ropeAccessArea || face.area, face.area) : 0;
+      face.accessLevel === "drone-impossible" ? Math.min(face.ropeAccessArea || face.area, face.area) : 0;
 
     return {
       name: face.name,
@@ -660,10 +634,6 @@ export function calculateEstimate(
     droneArea + groundIRArea > 0 ? 1 : 0
   );
 
-  const needsLineDrone = building.faces.some(
-    (f) => f.accessLevel === "line-drone"
-  );
-
   // Two scenarios
   const current = calculateScenario(
     "現状（解析外注）",
@@ -674,7 +644,6 @@ export function calculateEstimate(
     droneArea,
     groundIRArea,
     ropeAccessArea,
-    needsLineDrone
   );
 
   const ov = futureOverrides ?? DEFAULT_FUTURE_OVERRIDES;
@@ -688,7 +657,6 @@ export function calculateEstimate(
     droneArea,
     groundIRArea,
     ropeAccessArea,
-    needsLineDrone
   );
 
   // Comparison with full rope access
@@ -733,30 +701,27 @@ function buildScenarioFaces(
     (f) => !(f.groundIRPossible && f.groundIRArea >= f.area)
   );
 
-  // Sort regular faces: prioritize faces that were originally line-drone or free-drone
+  // Sort regular faces: prioritize faces that were originally drone-possible
   const sorted = [...regularFaces].sort((a, b) => {
     const order: Record<AccessLevel, number> = {
-      "line-drone": 0,
-      "free-drone": 1,
-      "no-drone": 2,
+      "drone-possible": 0,
+      "drone-impossible": 1,
     };
     return order[a.accessLevel] - order[b.accessLevel];
   });
 
   const scenarioFaces = sorted.map((face, i) => {
     if (i < droneCount) {
-      // This face uses line-drone
       return {
         ...face,
-        accessLevel: "line-drone" as AccessLevel,
+        accessLevel: "drone-possible" as AccessLevel,
         inspectionMethod: "infrared" as InspectionMethod,
         ropeAccessArea: 0,
       };
     } else {
-      // This face uses rope access
       return {
         ...face,
-        accessLevel: "no-drone" as AccessLevel,
+        accessLevel: "drone-impossible" as AccessLevel,
         inspectionMethod: "percussion" as InspectionMethod,
         ropeAccessArea: face.area,
       };

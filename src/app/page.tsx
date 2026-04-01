@@ -34,9 +34,8 @@ function pct(n: number): string {
 }
 
 const ACCESS_LABELS: Record<AccessLevel, { symbol: string; label: string; color: string; bg: string }> = {
-  "free-drone": { symbol: "○", label: "フリードローン可", color: "text-green-600", bg: "bg-green-50 border-green-300" },
-  "line-drone": { symbol: "△", label: "ラインドローン使用で可", color: "text-yellow-600", bg: "bg-yellow-50 border-yellow-300" },
-  "no-drone": { symbol: "×", label: "ドローン不可", color: "text-red-600", bg: "bg-red-50 border-red-300" },
+  "drone-possible": { symbol: "○", label: "ラインドローンシステムで実施可能", color: "text-green-600", bg: "bg-green-50 border-green-300" },
+  "drone-impossible": { symbol: "×", label: "ラインドローンシステムで実施不可", color: "text-red-600", bg: "bg-red-50 border-red-300" },
 };
 
 const METHOD_LABELS: Record<InspectionMethod, string> = {
@@ -221,7 +220,7 @@ function ScenarioCard({ scenario, label, surveyDays, config, irArea, ropeArea }:
   ropeArea: number;
 }) {
   const irRate = label.includes("自社") ? config.irAnalysis.internalCostPerM2 : config.irAnalysis.outsourceCostPerM2;
-  const equipPerDay = config.equipment.drone + config.equipment.irCamera + config.equipment.misc;
+  const equipPerDay = config.equipment.drone + config.equipment.irCamera + config.equipment.lineDroneSystem + config.equipment.vehicle + config.equipment.misc;
 
   return (
     <div className="bg-white rounded-lg border border-border p-4">
@@ -259,13 +258,9 @@ function ScenarioCard({ scenario, label, surveyDays, config, irArea, ropeArea }:
           </h4>
           <table className="w-full text-sm">
             <tbody>
-              {scenario.customerEstimate.freeDroneIRFee > 0 && (
-                <CostRow label="フリードローン赤外線" value={scenario.customerEstimate.freeDroneIRFee}
-                  sub={`${Math.round(scenario.customerEstimate.freeDroneIRFee / config.unitPricePerM2).toLocaleString()}m2 x ${config.unitPricePerM2}円/m2`} />
-              )}
-              {scenario.customerEstimate.lineDroneIRFee > 0 && (
-                <CostRow label="ラインドローン赤外線" value={scenario.customerEstimate.lineDroneIRFee}
-                  sub={`${Math.round(scenario.customerEstimate.lineDroneIRFee / config.unitPricePerM2).toLocaleString()}m2 x ${config.unitPricePerM2}円/m2`} />
+              {scenario.customerEstimate.droneIRFee > 0 && (
+                <CostRow label="ドローン赤外線調査" value={scenario.customerEstimate.droneIRFee}
+                  sub={`${Math.round(scenario.customerEstimate.droneIRFee / config.unitPricePerM2).toLocaleString()}m2 x ${config.unitPricePerM2}円/m2`} />
               )}
               {scenario.customerEstimate.groundIRFee > 0 && (
                 <CostRow label="地上赤外線" value={scenario.customerEstimate.groundIRFee}
@@ -428,7 +423,8 @@ function SensitivityTable({
                   key={s}
                   className="text-center py-2 px-2 font-medium text-text-secondary whitespace-nowrap"
                 >
-                  {s}
+                  <div>{s}</div>
+                  <div className="text-xs font-normal text-text-muted">販売価格 / 利益</div>
                 </th>
               ))}
             </tr>
@@ -449,6 +445,9 @@ function SensitivityTable({
                   </td>
                   {row.scenarios.map((sc) => (
                     <td key={sc.label} className="py-2 px-2 text-center">
+                      <div className="text-xs text-text-muted mb-0.5">
+                        {sc.salesPrice.toLocaleString("ja-JP")}円
+                      </div>
                       <div
                         className={`rounded px-2 py-1 ${sc.profit >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}
                       >
@@ -515,7 +514,7 @@ function FaceEditor({
           onChange={(e) => {
             const area = Number(e.target.value) || 0;
             const patch: Partial<FaceInput> = { area };
-            if (face.accessLevel === "no-drone") {
+            if (face.accessLevel === "drone-impossible") {
               patch.ropeAccessArea = area;
             }
             update(patch);
@@ -529,7 +528,7 @@ function FaceEditor({
           onChange={(e) => {
             const level = e.target.value as AccessLevel;
             const patch: Partial<FaceInput> = { accessLevel: level };
-            if (level === "no-drone") {
+            if (level === "drone-impossible") {
               patch.inspectionMethod = "percussion";
               patch.ropeAccessArea = face.area;
             } else {
@@ -540,9 +539,8 @@ function FaceEditor({
           }}
           className="text-xs border border-border rounded px-1 py-1 bg-white"
         >
-          <option value="free-drone">ドローン可</option>
-          <option value="line-drone">ライン式</option>
-          <option value="no-drone">不可</option>
+          <option value="drone-possible">実施可能</option>
+          <option value="drone-impossible">実施不可</option>
         </select>
         <div className="flex items-center gap-1 ml-auto shrink-0">
           <button
@@ -591,7 +589,7 @@ function FaceEditor({
               />
             </div>
           </div>
-          {face.accessLevel === "no-drone" && (
+          {face.accessLevel === "drone-impossible" && (
             <div className="text-sm">
               <label className="text-xs text-text-muted">ロープアクセス面積 (m2)</label>
               <input
@@ -715,7 +713,7 @@ function ConfigEditor({
     <div className="space-y-4">
       {/* 変数: スライダーで調整可能 */}
       <div>
-        <div className="flex justify-between items-center mb-3">
+        <div className="flex justify-between items-center mb-1">
           <h3 className="text-sm font-bold text-accent">Step 2: 単価を調整</h3>
           <button
             onClick={onReset}
@@ -724,6 +722,7 @@ function ConfigEditor({
             リセット
           </button>
         </div>
+        <p className="text-xs text-text-muted mb-3">面積あたりの顧客への販売単価を設定</p>
         <div className="space-y-4">
           <SliderField
             label="ドローン調査 販売単価"
@@ -769,7 +768,8 @@ function ConfigEditor({
         {showConstants && (
           <div className="mt-3 space-y-3 text-xs">
             <div className="bg-gray-50 rounded p-3">
-              <h4 className="font-bold text-text-secondary mb-2">人件費（国交省R7単価準拠）</h4>
+              <h4 className="font-bold text-text-secondary mb-1">人件費（国交省R7準拠・販売想定）</h4>
+              <p className="text-xs text-text-muted mb-2">実際の原価は「自社化シミュレーション」で調整</p>
               <div className="space-y-1.5">
                 <ConstantField label="現場責任者 x1" value={config.personnelDetail.siteManager} unit="円/日"
                   isDefault={config.personnelDetail.siteManager === DEFAULT_CONFIG.personnelDetail.siteManager}
@@ -813,6 +813,9 @@ function ConfigEditor({
                 <ConstantField label="IRカメラ" value={config.equipment.irCamera} unit="円/日"
                   isDefault={config.equipment.irCamera === DEFAULT_CONFIG.equipment.irCamera}
                   onChange={(v) => onChange({ ...config, equipment: { ...config.equipment, irCamera: v } })} />
+                <ConstantField label="車両損料" value={config.equipment.vehicle} unit="円/日"
+                  isDefault={config.equipment.vehicle === DEFAULT_CONFIG.equipment.vehicle}
+                  onChange={(v) => onChange({ ...config, equipment: { ...config.equipment, vehicle: v } })} />
                 <ConstantField label="その他機材" value={config.equipment.misc} unit="円/日"
                   isDefault={config.equipment.misc === DEFAULT_CONFIG.equipment.misc}
                   onChange={(v) => onChange({ ...config, equipment: { ...config.equipment, misc: v } })} />
@@ -1089,7 +1092,7 @@ export default function EstimatePage() {
       try {
         const saved = localStorage.getItem("drone-estimate-config");
         const ver = localStorage.getItem("drone-estimate-config-ver");
-        if (saved && ver === "3") return JSON.parse(saved) as CostConfig;
+        if (saved && ver === "4") return JSON.parse(saved) as CostConfig;
         // Clear outdated config (e.g. old 210 yen default)
         localStorage.removeItem("drone-estimate-config");
       } catch {}
@@ -1101,7 +1104,7 @@ export default function EstimatePage() {
   useEffect(() => {
     try {
       localStorage.setItem("drone-estimate-config", JSON.stringify(config));
-      localStorage.setItem("drone-estimate-config-ver", "3");
+      localStorage.setItem("drone-estimate-config-ver", "4");
     } catch {}
   }, [config]);
 
@@ -1298,7 +1301,7 @@ export default function EstimatePage() {
                           newFaces = building.faces.map((f) => ({
                             ...f,
                             area: Math.round(f.area * ratio),
-                            ropeAccessArea: f.accessLevel === "no-drone" ? Math.round(f.area * ratio) : f.ropeAccessArea,
+                            ropeAccessArea: f.accessLevel === "drone-impossible" ? Math.round(f.area * ratio) : f.ropeAccessArea,
                           }));
                         }
                         setBuilding({
@@ -1466,6 +1469,10 @@ export default function EstimatePage() {
                   current={config.equipment.lineDroneSystem}
                   value={futureOverrides.lineDroneSystemCost}
                   onChange={(v) => setFutureOverrides({ ...futureOverrides, lineDroneSystemCost: v })} />
+                <FutureRow label="車両損料" unit="円/日" percentMode={futurePercentMode}
+                  current={config.equipment.vehicle}
+                  value={futureOverrides.vehicleCost}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, vehicleCost: v })} />
                 <FutureRow label="その他機材" unit="円/日" percentMode={futurePercentMode}
                   current={config.equipment.misc}
                   value={futureOverrides.miscCost}
@@ -1580,6 +1587,28 @@ export default function EstimatePage() {
               </div>
             </div>
 
+            {/* 算出ロジック説明 */}
+            <CollapsibleSection title="算出ロジックの説明" defaultOpen={false}>
+              <div className="text-xs text-text-secondary space-y-2">
+                <div>
+                  <p className="font-bold mb-1">1. 調査日数の決定</p>
+                  <p className="text-text-muted">ドローン調査面積 / 日次調査能力（{config.droneCapacityPerDay.toLocaleString()}m2/日）と地上IR面積 / 地上IR能力（{config.groundIRCapacityPerDay.toLocaleString()}m2/日）の大きい方（最低1日）</p>
+                </div>
+                <div>
+                  <p className="font-bold mb-1">2. 原価積算</p>
+                  <p className="text-text-muted">人件費（チーム{config.teamCostPerDay.toLocaleString()}円/日 x 日数）+ 機材費 + 赤外線解析費（面積 x 単価）+ 交通費 + ロープアクセス外注費 = 直接原価。直接原価 x 管理費率{config.adminRatePercent}% = 一般管理費。直接原価 + 一般管理費 = 原価合計。</p>
+                </div>
+                <div>
+                  <p className="font-bold mb-1">3. 販売価格算出</p>
+                  <p className="text-text-muted">ドローン調査面積 x 販売単価（{config.unitPricePerM2}円/m2）+ ロープアクセス面積 x ロープ単価（{config.ropeAccessPricePerM2}円/m2）= 販売価格</p>
+                </div>
+                <div>
+                  <p className="font-bold mb-1">4. 利益計算</p>
+                  <p className="text-text-muted">粗利 = 販売価格 - 直接原価。営業利益 = 販売価格 - 原価合計（直接原価 + 一般管理費）。</p>
+                </div>
+              </div>
+            </CollapsibleSection>
+
             {/* 飛行可否の詳細（警告がある場合のみ展開表示） */}
             {result.feasibility.overall !== "ok" && (
               <div className={`rounded-lg border p-4 ${overallBg[result.feasibility.overall]}`}>
@@ -1587,8 +1616,9 @@ export default function EstimatePage() {
               </div>
             )}
 
-            {/* 折りたたみ: 各面の判定サマリ */}
-            <CollapsibleSection title="各面の判定サマリ" defaultOpen={false}>
+            {/* 調査方法の面別判定 */}
+            <CollapsibleSection title="調査方法の面別判定" defaultOpen={true}>
+              <p className="text-xs text-text-muted mb-2">各面のラインドローンシステム適用可否と調査手法の一覧</p>
               <FaceSummaryTable result={result} />
             </CollapsibleSection>
 
@@ -1650,9 +1680,9 @@ export default function EstimatePage() {
 
       <footer className="border-t border-border mt-8 py-4">
         <p className="text-center text-xs text-text-muted">
-          ミラテクドローン 見積もりシミュレーター v2.2 —
+          ミラテクドローン 見積もりシミュレーター v2.3 —
           概算見積もり用。正式見積もりは現地調査後に作成します。
-          人件費は国交省R7年度設計業務委託等技術者単価に準拠。
+          人件費は国交省R7年度設計業務委託等技術者単価に準拠（販売想定）。
         </p>
       </footer>
     </div>
