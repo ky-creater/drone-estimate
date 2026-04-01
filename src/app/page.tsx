@@ -145,7 +145,18 @@ function ComparisonBar({ result }: { result: EstimateResult }) {
 
 // --- Scenario Card (Left=原価, Right=見積もり) ---
 
-function ScenarioCard({ scenario, label, showCost }: { scenario: ScenarioResult; label: string; showCost: boolean }) {
+function ScenarioCard({ scenario, label, showCost, surveyDays, config, irArea, ropeArea }: {
+  scenario: ScenarioResult;
+  label: string;
+  showCost: boolean;
+  surveyDays: number;
+  config: CostConfig;
+  irArea: number;
+  ropeArea: number;
+}) {
+  const irRate = label.includes("自社") ? config.irAnalysis.internalCostPerM2 : config.irAnalysis.outsourceCostPerM2;
+  const equipPerDay = config.equipment.drone + config.equipment.irCamera + config.equipment.misc;
+
   return (
     <div className="bg-white rounded-lg border border-border p-4">
       <h3 className="text-sm font-bold text-text-secondary mb-3">{label}</h3>
@@ -158,13 +169,19 @@ function ScenarioCard({ scenario, label, showCost }: { scenario: ScenarioResult;
           </h4>
           <table className="w-full text-sm">
             <tbody>
-              <CostRow label="人件費" value={scenario.costBreakdown.personnel} />
-              <CostRow label="機材費" value={scenario.costBreakdown.equipment} />
-              <CostRow label="赤外線解析費" value={scenario.costBreakdown.irAnalysis} />
-              <CostRow label="交通費" value={scenario.costBreakdown.transportation} />
-              <CostRow label="ロープアクセス外注" value={scenario.costBreakdown.ropeAccessSubcontract} />
+              <CostRow label="人件費" value={scenario.costBreakdown.personnel}
+                sub={`5名 x ${config.teamCostPerDay.toLocaleString()}円/日 x ${surveyDays}日`} />
+              <CostRow label="機材費" value={scenario.costBreakdown.equipment}
+                sub={`${equipPerDay.toLocaleString()}円/日 x ${surveyDays}日`} />
+              <CostRow label="赤外線解析費" value={scenario.costBreakdown.irAnalysis}
+                sub={irArea > 0 ? `${irArea.toLocaleString()}m2 x ${irRate}円/m2` : "対象なし"} />
+              <CostRow label="交通費" value={scenario.costBreakdown.transportation}
+                sub={`${config.transportationPerDay.toLocaleString()}円/日 x ${surveyDays}日`} />
+              <CostRow label="ロープアクセス外注" value={scenario.costBreakdown.ropeAccessSubcontract}
+                sub={ropeArea > 0 ? `${ropeArea.toLocaleString()}m2 x ${config.ropeAccessPercussionPerM2}円/m2` : "対象なし"} />
               <CostRow label="直接原価 小計" value={scenario.costBreakdown.directCost} bold />
-              <CostRow label="一般管理費" value={scenario.costBreakdown.adminCost} />
+              <CostRow label="一般管理費" value={scenario.costBreakdown.adminCost}
+                sub={`直接原価 x ${config.adminRatePercent}%`} />
               <CostRow label="原価合計" value={scenario.costBreakdown.totalCost} bold />
             </tbody>
           </table>
@@ -179,16 +196,20 @@ function ScenarioCard({ scenario, label, showCost }: { scenario: ScenarioResult;
           <table className="w-full text-sm">
             <tbody>
               {scenario.customerEstimate.freeDroneIRFee > 0 && (
-                <CostRow label="フリードローン赤外線" value={scenario.customerEstimate.freeDroneIRFee} />
+                <CostRow label="フリードローン赤外線" value={scenario.customerEstimate.freeDroneIRFee}
+                  sub={`${Math.round(scenario.customerEstimate.freeDroneIRFee / config.unitPricePerM2).toLocaleString()}m2 x ${config.unitPricePerM2}円/m2`} />
               )}
               {scenario.customerEstimate.lineDroneIRFee > 0 && (
-                <CostRow label="ラインドローン赤外線" value={scenario.customerEstimate.lineDroneIRFee} />
+                <CostRow label="ラインドローン赤外線" value={scenario.customerEstimate.lineDroneIRFee}
+                  sub={`${Math.round(scenario.customerEstimate.lineDroneIRFee / config.unitPricePerM2).toLocaleString()}m2 x ${config.unitPricePerM2}円/m2`} />
               )}
               {scenario.customerEstimate.groundIRFee > 0 && (
-                <CostRow label="地上赤外線" value={scenario.customerEstimate.groundIRFee} />
+                <CostRow label="地上赤外線" value={scenario.customerEstimate.groundIRFee}
+                  sub={`${Math.round(scenario.customerEstimate.groundIRFee / config.unitPricePerM2).toLocaleString()}m2 x ${config.unitPricePerM2}円/m2`} />
               )}
               {scenario.customerEstimate.ropePercussionFee > 0 && (
-                <CostRow label="ロープアクセス打診" value={scenario.customerEstimate.ropePercussionFee} />
+                <CostRow label="ロープアクセス打診" value={scenario.customerEstimate.ropePercussionFee}
+                  sub={`${Math.round(scenario.customerEstimate.ropePercussionFee / config.ropeAccessPricePerM2).toLocaleString()}m2 x ${config.ropeAccessPricePerM2}円/m2`} />
               )}
               <CostRow label="見積もり合計" value={scenario.customerEstimate.totalEstimate} bold />
             </tbody>
@@ -217,11 +238,14 @@ function ScenarioCard({ scenario, label, showCost }: { scenario: ScenarioResult;
   );
 }
 
-function CostRow({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
+function CostRow({ label, value, bold, sub }: { label: string; value: number; bold?: boolean; sub?: string }) {
   return (
     <tr className={`border-b border-border ${bold ? "bg-gray-50" : ""}`}>
-      <td className={`py-1.5 ${bold ? "font-bold" : ""}`}>{label}</td>
-      <td className={`py-1.5 text-right ${bold ? "font-bold" : ""}`}>{yen(value)}</td>
+      <td className={`py-1.5 ${bold ? "font-bold" : ""}`}>
+        {label}
+        {sub && <span className="block text-xs text-text-muted font-normal">{sub}</span>}
+      </td>
+      <td className={`py-1.5 text-right ${bold ? "font-bold" : ""} whitespace-nowrap`}>{yen(value)}</td>
     </tr>
   );
 }
@@ -1093,11 +1117,19 @@ export default function EstimatePage() {
                   scenario={result.current}
                   label="現状（解析外注）"
                   showCost={showCost}
+                  surveyDays={result.surveyDays}
+                  config={config}
+                  irArea={result.droneArea + result.groundIRArea}
+                  ropeArea={result.ropeAccessArea}
                 />
                 <ScenarioCard
                   scenario={result.future}
                   label="将来（自社化後）"
                   showCost={showCost}
+                  surveyDays={result.surveyDays}
+                  config={config}
+                  irArea={result.droneArea + result.groundIRArea}
+                  ropeArea={result.ropeAccessArea}
                 />
               </div>
               {result.future.profit > result.current.profit && (
