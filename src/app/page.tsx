@@ -241,11 +241,11 @@ function ScenarioCard({ scenario, label, showCost, surveyDays, config, irArea, r
 function CostRow({ label, value, bold, sub }: { label: string; value: number; bold?: boolean; sub?: string }) {
   return (
     <tr className={`border-b border-border ${bold ? "bg-gray-50" : ""}`}>
-      <td className={`py-1.5 ${bold ? "font-bold" : ""}`}>
-        {label}
-        {sub && <span className="block text-xs text-text-muted font-normal">{sub}</span>}
+      <td className={`py-1.5 ${bold ? "font-bold" : ""} whitespace-nowrap`}>{label}</td>
+      <td className={`py-1.5 text-right ${bold ? "font-bold" : ""} whitespace-nowrap`}>
+        {yen(value)}
+        {sub && <div className="text-xs text-text-muted font-normal">{sub}</div>}
       </td>
-      <td className={`py-1.5 text-right ${bold ? "font-bold" : ""} whitespace-nowrap`}>{yen(value)}</td>
     </tr>
   );
 }
