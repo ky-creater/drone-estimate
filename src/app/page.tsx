@@ -12,6 +12,8 @@ import {
   type AccessLevel,
   type InspectionMethod,
   DEFAULT_CONFIG,
+  type FutureOverrides,
+  DEFAULT_FUTURE_OVERRIDES,
   PRESETS,
   createDefaultFace,
   calculateEstimate,
@@ -145,10 +147,9 @@ function ComparisonBar({ result }: { result: EstimateResult }) {
 
 // --- Scenario Card (Left=原価, Right=見積もり) ---
 
-function ScenarioCard({ scenario, label, showCost, surveyDays, config, irArea, ropeArea }: {
+function ScenarioCard({ scenario, label, surveyDays, config, irArea, ropeArea }: {
   scenario: ScenarioResult;
   label: string;
-  showCost: boolean;
   surveyDays: number;
   config: CostConfig;
   irArea: number;
@@ -161,8 +162,7 @@ function ScenarioCard({ scenario, label, showCost, surveyDays, config, irArea, r
     <div className="bg-white rounded-lg border border-border p-4">
       <h3 className="text-sm font-bold text-text-secondary mb-3">{label}</h3>
       <div className="space-y-4">
-        {/* 原価内訳（社内モードのみ） */}
-        {showCost && (
+        {/* 原価内訳 */}
         <div>
           <h4 className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">
             原価内訳
@@ -186,9 +186,8 @@ function ScenarioCard({ scenario, label, showCost, surveyDays, config, irArea, r
             </tbody>
           </table>
         </div>
-        )}
 
-        {/* Right: お客様向け見積もり */}
+        {/* お客様向け見積もり */}
         <div>
           <h4 className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">
             お客様向け見積もり
@@ -215,8 +214,7 @@ function ScenarioCard({ scenario, label, showCost, surveyDays, config, irArea, r
             </tbody>
           </table>
 
-          {/* Profit summary (社内モードのみ) */}
-          {showCost && (
+          {/* Profit summary */}
           <div className="mt-3 pt-3 border-t border-border">
             <div className="flex justify-between text-sm">
               <span>粗利</span>
@@ -231,7 +229,6 @@ function ScenarioCard({ scenario, label, showCost, surveyDays, config, irArea, r
               </span>
             </div>
           </div>
-          )}
         </div>
       </div>
     </div>
@@ -321,11 +318,9 @@ function FaceSummaryTable({ result }: { result: EstimateResult }) {
 function SensitivityTable({
   building,
   config,
-  showCost,
 }: {
   building: BuildingInput;
   config: CostConfig;
-  showCost: boolean;
 }) {
   const sensitivity = useMemo(
     () =>
@@ -384,11 +379,9 @@ function SensitivityTable({
                           {sc.profit >= 0 ? "+" : ""}
                           {sc.profit.toLocaleString("ja-JP")}円
                         </div>
-                        {showCost && (
-                          <div className="text-xs opacity-75">
-                            ({sc.profitRate.toFixed(1)}%)
-                          </div>
-                        )}
+                        <div className="text-xs opacity-75">
+                          ({sc.profitRate.toFixed(1)}%)
+                        </div>
                       </div>
                     </td>
                   ))}
@@ -806,7 +799,6 @@ export default function EstimatePage() {
     }
     return { ...DEFAULT_CONFIG };
   });
-  const [showCost, setShowCost] = useState(false);
   const [showFaces, setShowFaces] = useState(false);
 
   useEffect(() => {
@@ -816,10 +808,25 @@ export default function EstimatePage() {
     } catch {}
   }, [config]);
 
+  const [futureOverrides, setFutureOverrides] = useState<FutureOverrides>({ ...DEFAULT_FUTURE_OVERRIDES });
+
   const result = useMemo(
-    () => calculateEstimate(building, config),
-    [building, config]
+    () => calculateEstimate(building, config, futureOverrides),
+    [building, config, futureOverrides]
   );
+
+  // 将来シナリオ用の適用済みconfig（ScenarioCardの計算根拠表示用）
+  const futureConfig = useMemo(() => {
+    const c = JSON.parse(JSON.stringify(config)) as CostConfig;
+    if (futureOverrides.pilot) {
+      c.personnelDetail = { ...c.personnelDetail, pilot: futureOverrides.pilotCost ?? 35000 };
+      c.teamCostPerDay = c.personnelDetail.siteManager + c.personnelDetail.pilot + c.personnelDetail.photographer + c.personnelDetail.assistantOrTechB * 2;
+    }
+    if (futureOverrides.drone) c.equipment = { ...c.equipment, drone: futureOverrides.droneCost ?? 5000 };
+    if (futureOverrides.irCamera) c.equipment = { ...c.equipment, irCamera: futureOverrides.irCameraCost ?? 2000 };
+    if (futureOverrides.irAnalysis) c.irAnalysis = { ...c.irAnalysis, outsourceCostPerM2: c.irAnalysis.internalCostPerM2 };
+    return c;
+  }, [config, futureOverrides]);
 
   const applyPreset = useCallback(
     (presetIndex: number) => {
@@ -890,20 +897,12 @@ export default function EstimatePage() {
               ドローン外壁調査の概算見積もりを即時算出
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowCost(!showCost)}
-              className={`text-xs px-3 py-1.5 rounded-full transition-colors ${showCost ? "bg-yellow-400 text-gray-900 font-bold" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
-            >
-              {showCost ? "社内モード" : "顧客モード"}
-            </button>
-            <a
-              href="#results"
-              className="lg:hidden text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full transition-colors"
-            >
-              結果を見る
-            </a>
-          </div>
+          <a
+            href="#results"
+            className="lg:hidden text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full transition-colors"
+          >
+            結果を見る
+          </a>
         </div>
       </header>
 
@@ -1073,6 +1072,75 @@ export default function EstimatePage() {
                 onReset={() => setConfig({ ...DEFAULT_CONFIG })}
               />
             </div>
+
+            {/* 自社化シミュレーション設定 */}
+            <div className="bg-white rounded-lg border-2 border-green-200 p-4">
+              <h3 className="text-sm font-bold text-green-700 mb-1">Step 3: 自社化シミュレーション</h3>
+              <p className="text-xs text-text-muted mb-3">チェックした項目を「将来（自社化後）」シナリオに反映</p>
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={futureOverrides.irAnalysis}
+                    onChange={(e) => setFutureOverrides({ ...futureOverrides, irAnalysis: e.target.checked })}
+                    className="accent-green-600 w-4 h-4" />
+                  <span>赤外線解析の内製化</span>
+                  <span className="text-xs text-text-muted ml-auto">{config.irAnalysis.outsourceCostPerM2}→{config.irAnalysis.internalCostPerM2}円/m2</span>
+                </label>
+
+                <div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={futureOverrides.pilot}
+                      onChange={(e) => setFutureOverrides({ ...futureOverrides, pilot: e.target.checked })}
+                      className="accent-green-600 w-4 h-4" />
+                    <span>パイロット自社雇用</span>
+                    <span className="text-xs text-text-muted ml-auto">{config.personnelDetail.pilot.toLocaleString()}→</span>
+                  </label>
+                  {futureOverrides.pilot && (
+                    <div className="ml-6 mt-1 flex items-center gap-1">
+                      <input type="number" value={futureOverrides.pilotCost}
+                        onChange={(e) => setFutureOverrides({ ...futureOverrides, pilotCost: Number(e.target.value) || 0 })}
+                        className="w-20 border border-green-300 bg-green-50 rounded px-1.5 py-0.5 text-sm text-right" />
+                      <span className="text-xs text-text-muted">円/日</span>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={futureOverrides.drone}
+                      onChange={(e) => setFutureOverrides({ ...futureOverrides, drone: e.target.checked })}
+                      className="accent-green-600 w-4 h-4" />
+                    <span>ドローン自社保有</span>
+                    <span className="text-xs text-text-muted ml-auto">{config.equipment.drone.toLocaleString()}→</span>
+                  </label>
+                  {futureOverrides.drone && (
+                    <div className="ml-6 mt-1 flex items-center gap-1">
+                      <input type="number" value={futureOverrides.droneCost}
+                        onChange={(e) => setFutureOverrides({ ...futureOverrides, droneCost: Number(e.target.value) || 0 })}
+                        className="w-20 border border-green-300 bg-green-50 rounded px-1.5 py-0.5 text-sm text-right" />
+                      <span className="text-xs text-text-muted">円/日（減価償却）</span>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={futureOverrides.irCamera}
+                      onChange={(e) => setFutureOverrides({ ...futureOverrides, irCamera: e.target.checked })}
+                      className="accent-green-600 w-4 h-4" />
+                    <span>IRカメラ自社保有</span>
+                    <span className="text-xs text-text-muted ml-auto">{config.equipment.irCamera.toLocaleString()}→</span>
+                  </label>
+                  {futureOverrides.irCamera && (
+                    <div className="ml-6 mt-1 flex items-center gap-1">
+                      <input type="number" value={futureOverrides.irCameraCost}
+                        onChange={(e) => setFutureOverrides({ ...futureOverrides, irCameraCost: Number(e.target.value) || 0 })}
+                        className="w-20 border border-green-300 bg-green-50 rounded px-1.5 py-0.5 text-sm text-right" />
+                      <span className="text-xs text-text-muted">円/日（減価償却）</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Right: Results */}
@@ -1107,29 +1175,27 @@ export default function EstimatePage() {
                 </div>
               </div>
 
-              {/* 社内メトリクス（社内モードのみ） */}
-              {showCost && (
-                <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-border">
-                  <div className="text-center">
-                    <div className="text-xs text-text-muted">原価</div>
-                    <div className="text-sm font-bold">{yen(result.current.costBreakdown.totalCost)}</div>
-                    <div className="text-xs text-text-muted">{result.current.perM2.cost} 円/m2</div>
+              {/* 社内メトリクス */}
+              <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-border">
+                <div className="text-center">
+                  <div className="text-xs text-text-muted">原価</div>
+                  <div className="text-sm font-bold">{yen(result.current.costBreakdown.totalCost)}</div>
+                  <div className="text-xs text-text-muted">{result.current.perM2.cost} 円/m2</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-text-muted">粗利</div>
+                  <div className={`text-sm font-bold ${result.current.profit >= 0 ? "text-positive" : "text-negative"}`}>
+                    {yen(result.current.profit)}
                   </div>
-                  <div className="text-center">
-                    <div className="text-xs text-text-muted">粗利</div>
-                    <div className={`text-sm font-bold ${result.current.profit >= 0 ? "text-positive" : "text-negative"}`}>
-                      {yen(result.current.profit)}
-                    </div>
-                    <div className="text-xs text-text-muted">{result.current.perM2.profit} 円/m2</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-xs text-text-muted">粗利率</div>
-                    <div className={`text-sm font-bold ${result.current.profitRate >= 0 ? "text-positive" : "text-negative"}`}>
-                      {pct(result.current.profitRate)}
-                    </div>
+                  <div className="text-xs text-text-muted">{result.current.perM2.profit} 円/m2</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-text-muted">粗利率</div>
+                  <div className={`text-sm font-bold ${result.current.profitRate >= 0 ? "text-positive" : "text-negative"}`}>
+                    {pct(result.current.profitRate)}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
             {/* ロープアクセスとの比較 — お得感を前面に */}
@@ -1175,16 +1241,13 @@ export default function EstimatePage() {
               <FaceSummaryTable result={result} />
             </CollapsibleSection>
 
-            {/* 折りたたみ: 感度分析（社内モードのみ） */}
-            {showCost && (
-              <CollapsibleSection title="感度分析（単価 x ドローン適用面数）" defaultOpen={false}>
-                <SensitivityTable
-                  building={building}
-                  config={config}
-                  showCost={showCost}
-                />
-              </CollapsibleSection>
-            )}
+            {/* 折りたたみ: 感度分析 */}
+            <CollapsibleSection title="感度分析（単価 x ドローン適用面数）" defaultOpen={false}>
+              <SensitivityTable
+                building={building}
+                config={config}
+              />
+            </CollapsibleSection>
 
             {/* 折りたたみ: シナリオ比較 */}
             <CollapsibleSection title="シナリオ比較（外注 vs 自社化）" defaultOpen={false}>
@@ -1192,7 +1255,6 @@ export default function EstimatePage() {
                 <ScenarioCard
                   scenario={result.current}
                   label="現状（解析外注）"
-                  showCost={showCost}
                   surveyDays={result.surveyDays}
                   config={config}
                   irArea={result.droneArea + result.groundIRArea}
@@ -1201,9 +1263,8 @@ export default function EstimatePage() {
                 <ScenarioCard
                   scenario={result.future}
                   label="将来（自社化後）"
-                  showCost={showCost}
                   surveyDays={result.surveyDays}
-                  config={config}
+                  config={futureConfig}
                   irArea={result.droneArea + result.groundIRArea}
                   ropeArea={result.ropeAccessArea}
                 />
