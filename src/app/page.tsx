@@ -14,6 +14,7 @@ import {
   DEFAULT_CONFIG,
   type FutureOverrides,
   DEFAULT_FUTURE_OVERRIDES,
+  applyFutureOverrides,
   PRESETS,
   createDefaultFace,
   calculateEstimate,
@@ -91,6 +92,41 @@ function StatCard({
         {value}
       </div>
       {sub && <div className="text-xs text-text-muted mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+function FutureRow({
+  label,
+  unit,
+  current,
+  value,
+  onChange,
+}: {
+  label: string;
+  unit: string;
+  current: number;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const changed = value !== current;
+  return (
+    <div className="grid grid-cols-[1fr_5rem_5rem] items-center gap-2 text-sm">
+      <span className="text-text-primary">
+        {label}
+        <span className="text-xs text-text-muted ml-1">{unit}</span>
+      </span>
+      <span className="text-right text-text-muted tabular-nums">{current.toLocaleString()}</span>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value) || 0)}
+        className={`w-full border rounded px-1.5 py-0.5 text-sm text-right tabular-nums ${
+          changed
+            ? "border-green-400 bg-green-50 font-medium text-green-800"
+            : "border-gray-200 bg-white"
+        }`}
+      />
     </div>
   );
 }
@@ -816,17 +852,10 @@ export default function EstimatePage() {
   );
 
   // 将来シナリオ用の適用済みconfig（ScenarioCardの計算根拠表示用）
-  const futureConfig = useMemo(() => {
-    const c = JSON.parse(JSON.stringify(config)) as CostConfig;
-    if (futureOverrides.pilot) {
-      c.personnelDetail = { ...c.personnelDetail, pilot: futureOverrides.pilotCost ?? 35000 };
-      c.teamCostPerDay = c.personnelDetail.siteManager + c.personnelDetail.pilot + c.personnelDetail.photographer + c.personnelDetail.assistantOrTechB * 2;
-    }
-    if (futureOverrides.drone) c.equipment = { ...c.equipment, drone: futureOverrides.droneCost ?? 5000 };
-    if (futureOverrides.irCamera) c.equipment = { ...c.equipment, irCamera: futureOverrides.irCameraCost ?? 2000 };
-    if (futureOverrides.irAnalysis) c.irAnalysis = { ...c.irAnalysis, outsourceCostPerM2: c.irAnalysis.internalCostPerM2 };
-    return c;
-  }, [config, futureOverrides]);
+  const futureConfig = useMemo(
+    () => applyFutureOverrides(config, futureOverrides),
+    [config, futureOverrides]
+  );
 
   const applyPreset = useCallback(
     (presetIndex: number) => {
@@ -1075,70 +1104,46 @@ export default function EstimatePage() {
 
             {/* 自社化シミュレーション設定 */}
             <div className="bg-white rounded-lg border-2 border-green-200 p-4">
-              <h3 className="text-sm font-bold text-green-700 mb-1">Step 3: 自社化シミュレーション</h3>
-              <p className="text-xs text-text-muted mb-3">チェックした項目を「将来（自社化後）」シナリオに反映</p>
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={futureOverrides.irAnalysis}
-                    onChange={(e) => setFutureOverrides({ ...futureOverrides, irAnalysis: e.target.checked })}
-                    className="accent-green-600 w-4 h-4" />
-                  <span>赤外線解析の内製化</span>
-                  <span className="text-xs text-text-muted ml-auto">{config.irAnalysis.outsourceCostPerM2}→{config.irAnalysis.internalCostPerM2}円/m2</span>
-                </label>
-
-                <div>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={futureOverrides.pilot}
-                      onChange={(e) => setFutureOverrides({ ...futureOverrides, pilot: e.target.checked })}
-                      className="accent-green-600 w-4 h-4" />
-                    <span>パイロット自社雇用</span>
-                    <span className="text-xs text-text-muted ml-auto">{config.personnelDetail.pilot.toLocaleString()}→</span>
-                  </label>
-                  {futureOverrides.pilot && (
-                    <div className="ml-6 mt-1 flex items-center gap-1">
-                      <input type="number" value={futureOverrides.pilotCost}
-                        onChange={(e) => setFutureOverrides({ ...futureOverrides, pilotCost: Number(e.target.value) || 0 })}
-                        className="w-20 border border-green-300 bg-green-50 rounded px-1.5 py-0.5 text-sm text-right" />
-                      <span className="text-xs text-text-muted">円/日</span>
-                    </div>
-                  )}
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-bold text-green-700">Step 3: 自社化シミュレーション</h3>
+                <button
+                  onClick={() => setFutureOverrides({ ...DEFAULT_FUTURE_OVERRIDES })}
+                  className="text-xs text-text-muted hover:text-text-primary"
+                >
+                  リセット
+                </button>
+              </div>
+              <p className="text-xs text-text-muted mb-3">「将来（自社化後）」シナリオのコストを直接編集</p>
+              <div className="space-y-2">
+                <div className="grid grid-cols-[1fr_5rem_5rem] gap-2 text-xs text-text-muted pb-1 border-b border-gray-100">
+                  <span>項目</span>
+                  <span className="text-right">現状</span>
+                  <span className="text-right">将来</span>
                 </div>
-
-                <div>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={futureOverrides.drone}
-                      onChange={(e) => setFutureOverrides({ ...futureOverrides, drone: e.target.checked })}
-                      className="accent-green-600 w-4 h-4" />
-                    <span>ドローン自社保有</span>
-                    <span className="text-xs text-text-muted ml-auto">{config.equipment.drone.toLocaleString()}→</span>
-                  </label>
-                  {futureOverrides.drone && (
-                    <div className="ml-6 mt-1 flex items-center gap-1">
-                      <input type="number" value={futureOverrides.droneCost}
-                        onChange={(e) => setFutureOverrides({ ...futureOverrides, droneCost: Number(e.target.value) || 0 })}
-                        className="w-20 border border-green-300 bg-green-50 rounded px-1.5 py-0.5 text-sm text-right" />
-                      <span className="text-xs text-text-muted">円/日（減価償却）</span>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={futureOverrides.irCamera}
-                      onChange={(e) => setFutureOverrides({ ...futureOverrides, irCamera: e.target.checked })}
-                      className="accent-green-600 w-4 h-4" />
-                    <span>IRカメラ自社保有</span>
-                    <span className="text-xs text-text-muted ml-auto">{config.equipment.irCamera.toLocaleString()}→</span>
-                  </label>
-                  {futureOverrides.irCamera && (
-                    <div className="ml-6 mt-1 flex items-center gap-1">
-                      <input type="number" value={futureOverrides.irCameraCost}
-                        onChange={(e) => setFutureOverrides({ ...futureOverrides, irCameraCost: Number(e.target.value) || 0 })}
-                        className="w-20 border border-green-300 bg-green-50 rounded px-1.5 py-0.5 text-sm text-right" />
-                      <span className="text-xs text-text-muted">円/日（減価償却）</span>
-                    </div>
-                  )}
-                </div>
+                <FutureRow
+                  label="赤外線解析" unit="円/m2"
+                  current={config.irAnalysis.outsourceCostPerM2}
+                  value={futureOverrides.irAnalysisCostPerM2}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, irAnalysisCostPerM2: v })}
+                />
+                <FutureRow
+                  label="パイロット" unit="円/日"
+                  current={config.personnelDetail.pilot}
+                  value={futureOverrides.pilotCost}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, pilotCost: v })}
+                />
+                <FutureRow
+                  label="ドローン機材" unit="円/日"
+                  current={config.equipment.drone}
+                  value={futureOverrides.droneCost}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, droneCost: v })}
+                />
+                <FutureRow
+                  label="IRカメラ" unit="円/日"
+                  current={config.equipment.irCamera}
+                  value={futureOverrides.irCameraCost}
+                  onChange={(v) => setFutureOverrides({ ...futureOverrides, irCameraCost: v })}
+                />
               </div>
             </div>
           </div>

@@ -551,38 +551,25 @@ function calculateScenario(
 }
 
 export interface FutureOverrides {
-  irAnalysis: boolean;     // 赤外線解析の内製化
-  pilot: boolean;          // パイロット自社雇用
-  drone: boolean;          // ドローン自社保有
-  irCamera: boolean;       // IRカメラ自社保有
-  // カスタム値（チェック時に使う）
-  pilotCost?: number;      // 自社パイロット日額
-  droneCost?: number;      // 自社ドローン日額（減価償却等）
-  irCameraCost?: number;   // 自社IRカメラ日額
+  irAnalysisCostPerM2: number;   // 将来の解析コスト/m2
+  pilotCost: number;             // 将来のパイロット日額
+  droneCost: number;             // 将来のドローン機材費/日
+  irCameraCost: number;          // 将来のIRカメラ機材費/日
 }
 
 export const DEFAULT_FUTURE_OVERRIDES: FutureOverrides = {
-  irAnalysis: true,
-  pilot: false,
-  drone: false,
-  irCamera: false,
+  irAnalysisCostPerM2: 60,
   pilotCost: 35000,
   droneCost: 5000,
   irCameraCost: 2000,
 };
 
-function applyFutureOverrides(config: CostConfig, overrides: FutureOverrides): CostConfig {
+export function applyFutureOverrides(config: CostConfig, overrides: FutureOverrides): CostConfig {
   const c = JSON.parse(JSON.stringify(config)) as CostConfig;
-  if (overrides.pilot) {
-    c.personnelDetail = { ...c.personnelDetail, pilot: overrides.pilotCost ?? 35000 };
-    c.teamCostPerDay = c.personnelDetail.siteManager + c.personnelDetail.pilot + c.personnelDetail.photographer + c.personnelDetail.assistantOrTechB * 2;
-  }
-  if (overrides.drone) {
-    c.equipment = { ...c.equipment, drone: overrides.droneCost ?? 5000 };
-  }
-  if (overrides.irCamera) {
-    c.equipment = { ...c.equipment, irCamera: overrides.irCameraCost ?? 2000 };
-  }
+  c.personnelDetail = { ...c.personnelDetail, pilot: overrides.pilotCost };
+  c.teamCostPerDay = c.personnelDetail.siteManager + c.personnelDetail.pilot + c.personnelDetail.photographer + c.personnelDetail.assistantOrTechB * 2;
+  c.equipment = { ...c.equipment, drone: overrides.droneCost, irCamera: overrides.irCameraCost };
+  c.irAnalysis = { ...c.irAnalysis, outsourceCostPerM2: overrides.irAnalysisCostPerM2 };
   return c;
 }
 
@@ -654,7 +641,7 @@ export function calculateEstimate(
   const futureConfig = applyFutureOverrides(config, ov);
   const future = calculateScenario(
     "将来（自社化後）",
-    ov.irAnalysis ? "internal" : "outsource",
+    "outsource", // irAnalysis rate is baked into futureConfig.irAnalysis.outsourceCostPerM2
     building,
     futureConfig,
     surveyDays,
