@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
+import qaData from "@/data/qa.json";
+import glossaryData from "@/data/glossary.json";
 import {
   type BuildingInput,
   type FaceInput,
@@ -846,9 +848,237 @@ function ConfigEditor({
   );
 }
 
+// --- Types for Q&A and Glossary data ---
+
+type QAItem = {
+  ステータス: string;
+  "No.": string;
+  カテゴリ: string;
+  想定質問: string;
+  "回答のポイント（初期案）": string;
+  想定されるタイミング: string;
+};
+
+type GlossaryItem = {
+  カテゴリ: string;
+  用語: string;
+  回答作成ステータス: string;
+  意味: string;
+  使用例: string;
+};
+
+// --- QA Tab Component ---
+
+function QATab() {
+  const items: QAItem[] = (qaData as { 想定QA: QAItem[] }).想定QA;
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string>("すべて");
+
+  const categories = useMemo(() => {
+    const cats = Array.from(new Set(items.map((i) => i.カテゴリ))).filter(Boolean);
+    return ["すべて", ...cats];
+  }, [items]);
+
+  const filtered = useMemo(() => {
+    return items.filter((item) => {
+      const matchCat = activeCategory === "すべて" || item.カテゴリ === activeCategory;
+      const matchSearch =
+        search === "" ||
+        item.想定質問.includes(search) ||
+        item["回答のポイント（初期案）"].includes(search) ||
+        item.カテゴリ.includes(search);
+      return matchCat && matchSearch;
+    });
+  }, [items, activeCategory, search]);
+
+  const categoryColors: Record<string, string> = {
+    コスト: "bg-blue-100 text-blue-700 border-blue-200",
+    品質: "bg-green-100 text-green-700 border-green-200",
+    技術: "bg-purple-100 text-purple-700 border-purple-200",
+    法規制: "bg-orange-100 text-orange-700 border-orange-200",
+    安全: "bg-red-100 text-red-700 border-red-200",
+    工程: "bg-yellow-100 text-yellow-700 border-yellow-200",
+    契約: "bg-pink-100 text-pink-700 border-pink-200",
+  };
+
+  const getCategoryStyle = (cat: string) =>
+    categoryColors[cat] ?? "bg-gray-100 text-gray-700 border-gray-200";
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+      {/* Search */}
+      <div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="質問・カテゴリを検索..."
+          className="w-full border border-border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+        />
+      </div>
+
+      {/* Category filter chips */}
+      <div className="flex flex-wrap gap-2">
+        {categories.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className={`text-xs px-3 py-1 rounded-full border transition-colors ${
+              activeCategory === cat
+                ? "bg-accent text-white border-accent"
+                : "border-border text-text-muted hover:border-accent hover:text-accent"
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Count */}
+      <p className="text-xs text-text-muted">{filtered.length} 件</p>
+
+      {/* Q&A Cards */}
+      <div className="space-y-3">
+        {filtered.map((item) => (
+          <div
+            key={item["No."]}
+            className="bg-white rounded-lg border border-border p-4 space-y-2"
+          >
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-text-muted font-mono">#{item["No."]}</span>
+              <span
+                className={`text-xs px-2 py-0.5 rounded border font-medium ${getCategoryStyle(item.カテゴリ)}`}
+              >
+                {item.カテゴリ}
+              </span>
+              {item.想定されるタイミング && (
+                <span className="text-xs px-2 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-600">
+                  {item.想定されるタイミング}
+                </span>
+              )}
+            </div>
+            <p className="text-sm font-semibold text-text-primary leading-relaxed">
+              Q. {item.想定質問}
+            </p>
+            {item["回答のポイント（初期案）"] && (
+              <p className="text-sm text-text-secondary leading-relaxed pl-3 border-l-2 border-accent/40">
+                {item["回答のポイント（初期案）"]}
+              </p>
+            )}
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <p className="text-sm text-text-muted text-center py-12">該当する質問が見つかりませんでした</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Glossary Tab Component ---
+
+function GlossaryTab() {
+  const droneTerms: GlossaryItem[] = (qaData as { 用語集: GlossaryItem[] }).用語集 ?? [];
+  const realEstateTerms: GlossaryItem[] = (glossaryData as { 不動産用語集: GlossaryItem[] }).不動産用語集 ?? [];
+
+  const [activeSheet, setActiveSheet] = useState<"drone" | "realestate">("drone");
+  const [search, setSearch] = useState("");
+
+  const items = activeSheet === "drone" ? droneTerms : realEstateTerms;
+
+  const filtered = useMemo(() => {
+    if (search === "") return items;
+    return items.filter(
+      (item) =>
+        item.用語.includes(search) ||
+        item.意味.includes(search) ||
+        item.カテゴリ.includes(search)
+    );
+  }, [items, search]);
+
+  // Group by カテゴリ
+  const grouped = useMemo(() => {
+    const map = new Map<string, GlossaryItem[]>();
+    for (const item of filtered) {
+      const cat = item.カテゴリ || "その他";
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(item);
+    }
+    return map;
+  }, [filtered]);
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+      {/* Sheet toggle */}
+      <div className="flex rounded-lg border border-border overflow-hidden w-fit">
+        <button
+          onClick={() => { setActiveSheet("drone"); setSearch(""); }}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            activeSheet === "drone"
+              ? "bg-accent text-white"
+              : "text-text-muted hover:bg-gray-50"
+          }`}
+        >
+          点検・ドローン用語
+        </button>
+        <button
+          onClick={() => { setActiveSheet("realestate"); setSearch(""); }}
+          className={`px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
+            activeSheet === "realestate"
+              ? "bg-accent text-white"
+              : "text-text-muted hover:bg-gray-50"
+          }`}
+        >
+          不動産用語
+        </button>
+      </div>
+
+      {/* Search */}
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="用語・意味を検索..."
+        className="w-full border border-border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+      />
+
+      <p className="text-xs text-text-muted">{filtered.length} 件</p>
+
+      {/* Grouped terms */}
+      <div className="space-y-6">
+        {Array.from(grouped.entries()).map(([category, terms]) => (
+          <div key={category}>
+            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2 pb-1 border-b border-border">
+              {category}
+            </h3>
+            <div className="space-y-3">
+              {terms.map((term, i) => (
+                <div key={i} className="bg-white rounded-lg border border-border p-4">
+                  <p className="text-sm font-bold text-text-primary mb-1">{term.用語}</p>
+                  <p className="text-sm text-text-secondary leading-relaxed">{term.意味}</p>
+                  {term.使用例 && (
+                    <p className="text-xs text-text-muted italic mt-2 pl-3 border-l-2 border-border">
+                      {term.使用例}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {grouped.size === 0 && (
+          <p className="text-sm text-text-muted text-center py-12">該当する用語が見つかりませんでした</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- Main Page ---
 
 export default function EstimatePage() {
+  const [activeTab, setActiveTab] = useState<"estimate" | "qa" | "glossary">("estimate");
+
   const [building, setBuilding] = useState<BuildingInput>({
     name: "",
     totalArea: 3000,
@@ -975,6 +1205,39 @@ export default function EstimatePage() {
         </div>
       </header>
 
+      {/* Tab Navigation */}
+      <nav className="bg-white border-b border-border sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex gap-0">
+            {(
+              [
+                { key: "estimate", label: "見積もり" },
+                { key: "qa", label: "想定Q&A" },
+                { key: "glossary", label: "用語集" },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-5 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                  activeTab === tab.key
+                    ? "border-accent text-accent"
+                    : "border-transparent text-text-muted hover:text-text-primary hover:border-border"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </nav>
+
+      {/* Tab Content */}
+      {activeTab === "qa" && <QATab />}
+      {activeTab === "glossary" && <GlossaryTab />}
+
+      {activeTab === "estimate" && (
+      <>
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Left: Input Form */}
@@ -1390,6 +1653,8 @@ export default function EstimatePage() {
           印刷 / PDF保存
         </button>
       </div>
+      </>
+      )}
 
       <footer className="border-t border-border mt-8 py-4">
         <p className="text-center text-xs text-text-muted">
