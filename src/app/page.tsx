@@ -870,7 +870,7 @@ type GlossaryItem = {
 // --- QA Tab Component ---
 
 function QATab() {
-  const items: QAItem[] = (qaData as { 想定QA: QAItem[] }).想定QA;
+  const items: QAItem[] = ((qaData as { 想定QA: QAItem[] }).想定QA ?? []).filter(item => item["No."] && item.想定質問);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("すべて");
 
@@ -975,28 +975,61 @@ function QATab() {
   );
 }
 
+// --- Glossary Accordion Section ---
+
+function GlossaryAccordion({ category, terms, forceOpen }: { category: string; terms: GlossaryItem[]; forceOpen: boolean }) {
+  const [open, setOpen] = useState(false);
+  const isOpen = forceOpen || open;
+
+  return (
+    <div className="bg-white rounded-lg border border-border overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+      >
+        <span className="text-sm font-bold text-text-secondary">{category}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs bg-gray-100 text-text-muted px-2 py-0.5 rounded-full">{terms.length}</span>
+          <span className={`text-xs text-text-muted transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`}>&#9654;</span>
+        </div>
+      </button>
+      {isOpen && (
+        <div className="px-4 pb-4 pt-1 border-t border-border">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {terms.map((term, i) => (
+              <div key={i} className="border border-border rounded-md px-3 py-2 hover:bg-gray-50">
+                <p className="text-sm font-bold text-text-primary leading-tight">{term.用語}</p>
+                <p className="text-xs text-text-secondary mt-0.5">{term.意味}</p>
+                {term.使用例 && (
+                  <p className="text-xs text-text-muted italic mt-1 opacity-80">例: {term.使用例}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Glossary Tab Component ---
+// Note: qa.json 用語集 and glossary.json 不動産用語集 are nearly identical.
+// Using glossary.json as unified source (has 打鍵 with reading).
 
 function GlossaryTab() {
-  const droneTerms: GlossaryItem[] = (qaData as { 用語集: GlossaryItem[] }).用語集 ?? [];
-  const realEstateTerms: GlossaryItem[] = (glossaryData as { 不動産用語集: GlossaryItem[] }).不動産用語集 ?? [];
-
-  const [activeSheet, setActiveSheet] = useState<"drone" | "realestate">("drone");
+  const allTerms: GlossaryItem[] = (glossaryData as { 不動産用語集: GlossaryItem[] }).不動産用語集 ?? [];
   const [search, setSearch] = useState("");
 
-  const items = activeSheet === "drone" ? droneTerms : realEstateTerms;
-
   const filtered = useMemo(() => {
-    if (search === "") return items;
-    return items.filter(
+    if (search === "") return allTerms;
+    return allTerms.filter(
       (item) =>
         item.用語.includes(search) ||
         item.意味.includes(search) ||
         item.カテゴリ.includes(search)
     );
-  }, [items, search]);
+  }, [allTerms, search]);
 
-  // Group by カテゴリ
   const grouped = useMemo(() => {
     const map = new Map<string, GlossaryItem[]>();
     for (const item of filtered) {
@@ -1007,64 +1040,23 @@ function GlossaryTab() {
     return map;
   }, [filtered]);
 
+  const isSearching = search.length > 0;
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
-      {/* Sheet toggle */}
-      <div className="flex rounded-lg border border-border overflow-hidden w-fit">
-        <button
-          onClick={() => { setActiveSheet("drone"); setSearch(""); }}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
-            activeSheet === "drone"
-              ? "bg-accent text-white"
-              : "text-text-muted hover:bg-gray-50"
-          }`}
-        >
-          点検・ドローン用語
-        </button>
-        <button
-          onClick={() => { setActiveSheet("realestate"); setSearch(""); }}
-          className={`px-4 py-2 text-sm font-medium transition-colors border-l border-border ${
-            activeSheet === "realestate"
-              ? "bg-accent text-white"
-              : "text-text-muted hover:bg-gray-50"
-          }`}
-        >
-          不動産用語
-        </button>
-      </div>
-
-      {/* Search */}
       <input
         type="text"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="用語・意味を検索..."
+        placeholder="用語・意味・カテゴリを検索..."
         className="w-full border border-border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
       />
 
-      <p className="text-xs text-text-muted">{filtered.length} 件</p>
+      <p className="text-xs text-text-muted">全 {filtered.length} 件 / {grouped.size} カテゴリ</p>
 
-      {/* Grouped terms */}
-      <div className="space-y-6">
+      <div className="space-y-2">
         {Array.from(grouped.entries()).map(([category, terms]) => (
-          <div key={category}>
-            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2 pb-1 border-b border-border">
-              {category}
-            </h3>
-            <div className="space-y-3">
-              {terms.map((term, i) => (
-                <div key={i} className="bg-white rounded-lg border border-border p-4">
-                  <p className="text-sm font-bold text-text-primary mb-1">{term.用語}</p>
-                  <p className="text-sm text-text-secondary leading-relaxed">{term.意味}</p>
-                  {term.使用例 && (
-                    <p className="text-xs text-text-muted italic mt-2 pl-3 border-l-2 border-border">
-                      {term.使用例}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <GlossaryAccordion key={category} category={category} terms={terms} forceOpen={isSearching} />
         ))}
         {grouped.size === 0 && (
           <p className="text-sm text-text-muted text-center py-12">該当する用語が見つかりませんでした</p>
