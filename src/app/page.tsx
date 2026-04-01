@@ -601,6 +601,35 @@ function SliderField({
   );
 }
 
+function ConstantField({
+  label,
+  value,
+  unit,
+  onChange: onChangeVal,
+  isDefault,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  onChange: (v: number) => void;
+  isDefault: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-text-muted shrink-0">{label}</span>
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => onChangeVal(Number(e.target.value) || 0)}
+          className={`w-20 border rounded px-1.5 py-0.5 text-right text-xs ${isDefault ? "border-border bg-white" : "border-yellow-400 bg-yellow-50"}`}
+        />
+        <span className="text-text-muted text-xs whitespace-nowrap">{unit}</span>
+      </div>
+    </div>
+  );
+}
+
 function ConfigEditor({
   config,
   onChange,
@@ -656,7 +685,7 @@ function ConfigEditor({
         </div>
       </div>
 
-      {/* 定数: 折りたたみ参考表示 */}
+      {/* 定数: 折りたたみ・編集可能 */}
       <div className="border-t border-border pt-3">
         <button
           onClick={() => setShowConstants(!showConstants)}
@@ -665,34 +694,81 @@ function ConfigEditor({
           <span className={`transition-transform ${showConstants ? "rotate-90" : ""}`}>
             &#9654;
           </span>
-          原価パラメータ（定数 / 上級者向け）
+          原価パラメータ（上級者向け）
         </button>
         {showConstants && (
           <div className="mt-3 space-y-3 text-xs">
             <div className="bg-gray-50 rounded p-3">
               <h4 className="font-bold text-text-secondary mb-2">人件費（国交省R7単価準拠）</h4>
-              <div className="grid grid-cols-2 gap-1 text-text-muted">
-                <span>現場責任者 x1</span><span className="text-right">{config.personnelDetail.siteManager.toLocaleString()}円/日</span>
-                <span>操縦士 x1</span><span className="text-right">{config.personnelDetail.pilot.toLocaleString()}円/日</span>
-                <span>撮影士 x1</span><span className="text-right">{config.personnelDetail.photographer.toLocaleString()}円/日</span>
-                <span>助手/技師B x2</span><span className="text-right">{config.personnelDetail.assistantOrTechB.toLocaleString()}円/日(1人)</span>
+              <div className="space-y-1.5">
+                <ConstantField label="現場責任者 x1" value={config.personnelDetail.siteManager} unit="円/日"
+                  isDefault={config.personnelDetail.siteManager === DEFAULT_CONFIG.personnelDetail.siteManager}
+                  onChange={(v) => {
+                    const personnelDetail = { ...config.personnelDetail, siteManager: v };
+                    const teamCostPerDay = personnelDetail.siteManager + personnelDetail.pilot + personnelDetail.photographer + personnelDetail.assistantOrTechB * 2;
+                    onChange({ ...config, personnelDetail, teamCostPerDay });
+                  }} />
+                <ConstantField label="操縦士 x1" value={config.personnelDetail.pilot} unit="円/日"
+                  isDefault={config.personnelDetail.pilot === DEFAULT_CONFIG.personnelDetail.pilot}
+                  onChange={(v) => {
+                    const personnelDetail = { ...config.personnelDetail, pilot: v };
+                    const teamCostPerDay = personnelDetail.siteManager + personnelDetail.pilot + personnelDetail.photographer + personnelDetail.assistantOrTechB * 2;
+                    onChange({ ...config, personnelDetail, teamCostPerDay });
+                  }} />
+                <ConstantField label="撮影士 x1" value={config.personnelDetail.photographer} unit="円/日"
+                  isDefault={config.personnelDetail.photographer === DEFAULT_CONFIG.personnelDetail.photographer}
+                  onChange={(v) => {
+                    const personnelDetail = { ...config.personnelDetail, photographer: v };
+                    const teamCostPerDay = personnelDetail.siteManager + personnelDetail.pilot + personnelDetail.photographer + personnelDetail.assistantOrTechB * 2;
+                    onChange({ ...config, personnelDetail, teamCostPerDay });
+                  }} />
+                <ConstantField label="助手/技師B x2" value={config.personnelDetail.assistantOrTechB} unit="円/日(1人)"
+                  isDefault={config.personnelDetail.assistantOrTechB === DEFAULT_CONFIG.personnelDetail.assistantOrTechB}
+                  onChange={(v) => {
+                    const personnelDetail = { ...config.personnelDetail, assistantOrTechB: v };
+                    const teamCostPerDay = personnelDetail.siteManager + personnelDetail.pilot + personnelDetail.photographer + personnelDetail.assistantOrTechB * 2;
+                    onChange({ ...config, personnelDetail, teamCostPerDay });
+                  }} />
               </div>
-              <div className="mt-1 pt-1 border-t border-border font-bold text-text-secondary">
+              <div className="mt-1.5 pt-1.5 border-t border-border font-bold text-text-secondary">
                 チーム合計: {config.teamCostPerDay.toLocaleString()}円/日（5名）
               </div>
             </div>
             <div className="bg-gray-50 rounded p-3">
-              <h4 className="font-bold text-text-secondary mb-2">機材・解析・その他</h4>
-              <div className="grid grid-cols-2 gap-1 text-text-muted">
-                <span>ドローン損料</span><span className="text-right">{config.equipment.drone.toLocaleString()}円/日</span>
-                <span>IRカメラ</span><span className="text-right">{config.equipment.irCamera.toLocaleString()}円/日</span>
-                <span>その他機材</span><span className="text-right">{config.equipment.misc.toLocaleString()}円/日</span>
-                <span>外注解析</span><span className="text-right">{config.irAnalysis.outsourceCostPerM2}円/m2</span>
-                <span>自社解析</span><span className="text-right">{config.irAnalysis.internalCostPerM2}円/m2</span>
-                <span>交通費</span><span className="text-right">{config.transportationPerDay.toLocaleString()}円/日</span>
-                <span>ロープ下請単価</span><span className="text-right">{config.ropeAccessPercussionPerM2}円/m2</span>
-                <span>調査能力(ドローン)</span><span className="text-right">{config.droneCapacityPerDay.toLocaleString()}m2/日</span>
-                <span>調査能力(地上IR)</span><span className="text-right">{config.groundIRCapacityPerDay.toLocaleString()}m2/日</span>
+              <h4 className="font-bold text-text-secondary mb-2">機材・解析</h4>
+              <div className="space-y-1.5">
+                <ConstantField label="ドローン損料" value={config.equipment.drone} unit="円/日"
+                  isDefault={config.equipment.drone === DEFAULT_CONFIG.equipment.drone}
+                  onChange={(v) => onChange({ ...config, equipment: { ...config.equipment, drone: v } })} />
+                <ConstantField label="IRカメラ" value={config.equipment.irCamera} unit="円/日"
+                  isDefault={config.equipment.irCamera === DEFAULT_CONFIG.equipment.irCamera}
+                  onChange={(v) => onChange({ ...config, equipment: { ...config.equipment, irCamera: v } })} />
+                <ConstantField label="その他機材" value={config.equipment.misc} unit="円/日"
+                  isDefault={config.equipment.misc === DEFAULT_CONFIG.equipment.misc}
+                  onChange={(v) => onChange({ ...config, equipment: { ...config.equipment, misc: v } })} />
+                <ConstantField label="外注解析" value={config.irAnalysis.outsourceCostPerM2} unit="円/m2"
+                  isDefault={config.irAnalysis.outsourceCostPerM2 === DEFAULT_CONFIG.irAnalysis.outsourceCostPerM2}
+                  onChange={(v) => onChange({ ...config, irAnalysis: { ...config.irAnalysis, outsourceCostPerM2: v } })} />
+                <ConstantField label="自社解析" value={config.irAnalysis.internalCostPerM2} unit="円/m2"
+                  isDefault={config.irAnalysis.internalCostPerM2 === DEFAULT_CONFIG.irAnalysis.internalCostPerM2}
+                  onChange={(v) => onChange({ ...config, irAnalysis: { ...config.irAnalysis, internalCostPerM2: v } })} />
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded p-3">
+              <h4 className="font-bold text-text-secondary mb-2">その他</h4>
+              <div className="space-y-1.5">
+                <ConstantField label="交通費" value={config.transportationPerDay} unit="円/日"
+                  isDefault={config.transportationPerDay === DEFAULT_CONFIG.transportationPerDay}
+                  onChange={(v) => onChange({ ...config, transportationPerDay: v })} />
+                <ConstantField label="ロープ下請単価" value={config.ropeAccessPercussionPerM2} unit="円/m2"
+                  isDefault={config.ropeAccessPercussionPerM2 === DEFAULT_CONFIG.ropeAccessPercussionPerM2}
+                  onChange={(v) => onChange({ ...config, ropeAccessPercussionPerM2: v })} />
+                <ConstantField label="調査能力(ドローン)" value={config.droneCapacityPerDay} unit="m2/日"
+                  isDefault={config.droneCapacityPerDay === DEFAULT_CONFIG.droneCapacityPerDay}
+                  onChange={(v) => onChange({ ...config, droneCapacityPerDay: v })} />
+                <ConstantField label="調査能力(地上IR)" value={config.groundIRCapacityPerDay} unit="m2/日"
+                  isDefault={config.groundIRCapacityPerDay === DEFAULT_CONFIG.groundIRCapacityPerDay}
+                  onChange={(v) => onChange({ ...config, groundIRCapacityPerDay: v })} />
               </div>
             </div>
           </div>
