@@ -160,8 +160,8 @@ function ScenarioCard({ scenario, label, showCost, surveyDays, config, irArea, r
   return (
     <div className="bg-white rounded-lg border border-border p-4">
       <h3 className="text-sm font-bold text-text-secondary mb-3">{label}</h3>
-      <div className={`grid grid-cols-1 ${showCost ? "md:grid-cols-2" : ""} gap-4`}>
-        {/* Left: 原価内訳（社内モードのみ） */}
+      <div className="space-y-4">
+        {/* 原価内訳（社内モードのみ） */}
         {showCost && (
         <div>
           <h4 className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">
