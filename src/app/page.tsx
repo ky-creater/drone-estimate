@@ -278,16 +278,28 @@ function ScenarioCard({ scenario, label, surveyDays, config, irArea, ropeArea }:
           </table>
 
           {/* Profit summary */}
-          <div className="mt-3 pt-3 border-t border-border">
+          <div className="mt-3 pt-3 border-t border-border space-y-1">
             <div className="flex justify-between text-sm">
-              <span>粗利</span>
+              <span className="text-text-muted text-xs">粗利（売上－直接原価）</span>
+              <span className={`font-bold ${scenario.grossProfit >= 0 ? "text-positive" : "text-negative"}`}>
+                {yen(scenario.grossProfit)}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-text-muted text-xs pl-2">粗利率</span>
+              <span className={`text-sm ${scenario.grossProfitRate >= 0 ? "text-positive" : "text-negative"}`}>
+                {pct(scenario.grossProfitRate)}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm pt-1 border-t border-dashed border-gray-100">
+              <span className="text-text-muted text-xs">営業利益（粗利－一般管理費）</span>
               <span className={`font-bold ${scenario.profit >= 0 ? "text-positive" : "text-negative"}`}>
                 {yen(scenario.profit)}
               </span>
             </div>
-            <div className="flex justify-between text-sm mt-1">
-              <span>粗利率</span>
-              <span className={`font-bold ${scenario.profitRate >= 0 ? "text-positive" : "text-negative"}`}>
+            <div className="flex justify-between text-sm">
+              <span className="text-text-muted text-xs pl-2">営業利益率</span>
+              <span className={`text-sm ${scenario.profitRate >= 0 ? "text-positive" : "text-negative"}`}>
                 {pct(scenario.profitRate)}
               </span>
             </div>
@@ -1251,21 +1263,30 @@ export default function EstimatePage() {
               </div>
 
               {/* 社内メトリクス */}
-              <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-border">
+              <div className="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-border">
                 <div className="text-center">
-                  <div className="text-xs text-text-muted">原価</div>
+                  <div className="text-xs text-text-muted">原価合計</div>
                   <div className="text-sm font-bold">{yen(result.current.costBreakdown.totalCost)}</div>
                   <div className="text-xs text-text-muted">{result.current.perM2.cost} 円/m2</div>
                 </div>
                 <div className="text-center">
                   <div className="text-xs text-text-muted">粗利</div>
+                  <div className={`text-sm font-bold ${result.current.grossProfit >= 0 ? "text-positive" : "text-negative"}`}>
+                    {yen(result.current.grossProfit)}
+                  </div>
+                  <div className={`text-xs ${result.current.grossProfitRate >= 0 ? "text-positive" : "text-negative"}`}>
+                    {pct(result.current.grossProfitRate)}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-text-muted">営業利益</div>
                   <div className={`text-sm font-bold ${result.current.profit >= 0 ? "text-positive" : "text-negative"}`}>
                     {yen(result.current.profit)}
                   </div>
                   <div className="text-xs text-text-muted">{result.current.perM2.profit} 円/m2</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xs text-text-muted">粗利率</div>
+                  <div className="text-xs text-text-muted">営業利益率</div>
                   <div className={`text-sm font-bold ${result.current.profitRate >= 0 ? "text-positive" : "text-negative"}`}>
                     {pct(result.current.profitRate)}
                   </div>
@@ -1349,8 +1370,8 @@ export default function EstimatePage() {
                   <span className="font-bold text-positive">
                     自社化による改善効果:
                   </span>{" "}
-                  粗利 +{yen(result.future.profit - result.current.profit)}
-                  （粗利率 {pct(result.current.profitRate)} →{" "}
+                  営業利益 +{yen(result.future.profit - result.current.profit)}
+                  （営業利益率 {pct(result.current.profitRate)} →{" "}
                   {pct(result.future.profitRate)}）
                 </div>
               )}

@@ -120,8 +120,10 @@ export interface ScenarioResult {
   costBreakdown: CostBreakdown;
   salesPrice: number;
   customerEstimate: CustomerEstimate;
-  profit: number;
-  profitRate: number;
+  grossProfit: number;      // 粗利 = 売上 - 直接原価
+  grossProfitRate: number;  // 粗利率
+  profit: number;           // 営業利益 = 粗利 - 一般管理費
+  profitRate: number;       // 営業利益率
   perM2: { sales: number; cost: number; profit: number };
 }
 
@@ -529,6 +531,8 @@ function calculateScenario(
     customerEstimate.ropePercussionFee;
 
   const salesPrice = customerEstimate.totalEstimate;
+  const grossProfit = salesPrice - directCost;
+  const grossProfitRate = salesPrice > 0 ? (grossProfit / salesPrice) * 100 : 0;
   const profit = salesPrice - totalCost;
   const profitRate = salesPrice > 0 ? (profit / salesPrice) * 100 : 0;
 
@@ -544,6 +548,8 @@ function calculateScenario(
     costBreakdown,
     salesPrice,
     customerEstimate,
+    grossProfit,
+    grossProfitRate,
     profit,
     profitRate,
     perM2,
