@@ -38,4 +38,6 @@ input[type="number"] {
   .lg\:col-span-2 { display: none !important; }
   .lg\:col-span-3 { grid-column: span 5 !important; }
   .grid.grid-cols-1.lg\:grid-cols-5 { display: block !important; }
+  .faq-accordion-list [class*="border-t"] { display: block !important; }
+  .faq-accordion-list button + div { display: block !important; }
 }

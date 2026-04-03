@@ -22,6 +22,7 @@ import {
   calculateEstimate,
   calculateSensitivity,
 } from "@/lib/estimate-engine";
+import { FAQ_DATA, FAQ_CATEGORIES, type FaqCategory } from "@/lib/faq-data";
 
 // --- Helpers ---
 
@@ -206,6 +207,103 @@ function ComparisonBar({ result }: { result: EstimateResult }) {
         </span>
       </div>
     </div>
+  );
+}
+
+function FaqAccordion({ item, isOpen, onToggle }: {
+  item: typeof FAQ_DATA[number];
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const timingStyle = item.timing === "初回提案時"
+    ? "bg-blue-100 text-blue-800 border-blue-300"
+    : "bg-amber-100 text-amber-800 border-amber-300";
+
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-sm font-bold text-accent shrink-0">Q{item.id}</span>
+          <span className="text-sm font-medium text-text-primary">{item.question}</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded border ${timingStyle}`}>
+            {item.timing}
+          </span>
+          <span className="text-text-muted text-lg leading-none">
+            {isOpen ? "−" : "+"}
+          </span>
+        </div>
+      </button>
+      {isOpen && (
+        <div className="px-4 pb-4 pt-0">
+          <div className="pl-8 text-sm text-text-secondary leading-relaxed border-t border-border pt-3">
+            {item.answer}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FaqSection() {
+  const [activeCategory, setActiveCategory] = useState<FaqCategory | "全て">("全て");
+  const [openIds, setOpenIds] = useState<Set<number>>(new Set());
+
+  const filtered = activeCategory === "全て"
+    ? FAQ_DATA
+    : FAQ_DATA.filter((item) => item.category === activeCategory);
+
+  const toggleItem = useCallback((id: number) => {
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  return (
+    <section className="max-w-7xl mx-auto px-4 mt-8">
+      <h2 className="text-lg font-bold text-text-primary mb-4">
+        想定質問集（ラインドローンシステム）
+      </h2>
+
+      {/* Category Tabs */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {(["全て", ...FAQ_CATEGORIES] as const).map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className={`px-3 py-1.5 text-xs font-bold rounded-full border transition-colors ${
+              activeCategory === cat
+                ? "bg-accent text-white border-accent"
+                : "bg-white text-text-secondary border-border hover:border-accent hover:text-accent"
+            }`}
+          >
+            {cat}
+            <span className="ml-1 opacity-70">
+              ({cat === "全て" ? FAQ_DATA.length : FAQ_DATA.filter((i) => i.category === cat).length})
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Accordion List */}
+      <div className="space-y-2 faq-accordion-list">
+        {filtered.map((item) => (
+          <FaqAccordion
+            key={item.id}
+            item={item}
+            isOpen={openIds.has(item.id)}
+            onToggle={() => toggleItem(item.id)}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1666,6 +1764,9 @@ export default function EstimatePage() {
         </div>
       </main>
 
+      {/* FAQ Section */}
+      <FaqSection />
+
       {/* Print Button */}
       <div className="max-w-7xl mx-auto px-4 mt-4 no-print">
         <button
@@ -1680,7 +1781,7 @@ export default function EstimatePage() {
 
       <footer className="border-t border-border mt-8 py-4">
         <p className="text-center text-xs text-text-muted">
-          ミラテクドローン 見積もりシミュレーター v2.3 —
+          ミラテクドローン 見積もりシミュレーター v2.4 —
           概算見積もり用。正式見積もりは現地調査後に作成します。
           人件費は国交省R7年度設計業務委託等技術者単価に準拠（販売想定）。
         </p>
