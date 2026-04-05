@@ -578,59 +578,75 @@ function ConfigEditor({ config, onChange, onReset }: { config: CostConfig; onCha
 
 // --- Self-Improvement Simulation ---
 
+function FutureRow({ label, unit, current, value, onChange }: {
+  label: string; unit: string; current: number; value: number; onChange: (v: number) => void;
+}) {
+  const changed = value !== current;
+  const diffPct = current > 0 ? Math.round((value / current) * 100) - 100 : 0;
+  return (
+    <div className="grid grid-cols-[1fr_5rem_5rem] items-center gap-2 text-sm">
+      <span className="text-text-primary text-xs">{label}<span className="text-text-muted ml-1">{unit}</span></span>
+      <span className="text-right text-text-muted tabular-nums text-xs">{current.toLocaleString()}</span>
+      <div className="flex flex-col items-end gap-0.5">
+        <input type="number" value={value} onChange={(e) => onChange(Number(e.target.value) || 0)}
+          className={`w-full border rounded px-1.5 py-0.5 text-xs text-right tabular-nums ${
+            changed ? "border-green-400 bg-green-50 font-medium text-green-800" : "border-gray-200 bg-white"
+          }`} />
+        {changed && (
+          <span className={`text-xs tabular-nums ${diffPct < 0 ? "text-positive" : "text-negative"}`}>
+            {diffPct > 0 ? "+" : ""}{diffPct}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SelfImprovementSection({ config, futureOverrides, onChange, onReset }: {
   config: CostConfig;
   futureOverrides: FutureOverrides;
   onChange: (ov: FutureOverrides) => void;
   onReset: () => void;
 }) {
-  const futureConfig = useMemo(() => applyFutureOverrides(config, futureOverrides), [config, futureOverrides]);
+  const set = (patch: Partial<FutureOverrides>) => onChange({ ...futureOverrides, ...patch });
 
   return (
     <div className="space-y-3">
       <div className="bg-green-50 border border-green-200 rounded p-3 text-xs text-green-800">
-        <p className="font-medium mb-1">この設定が「将来（自社化後）」シナリオに反映されます</p>
-        <p className="text-green-700">「シナリオ比較」タブで現状との差額を確認できます。最も効果が大きいのは解析内製化です。</p>
+        <p className="font-medium">この設定が「将来（自社化後）」シナリオに反映されます</p>
+        <p className="text-green-700 mt-0.5">右列で将来値を入力。変更分は色付きで表示されます。</p>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2 p-2 rounded border border-border">
-          <div>
-            <div className="text-sm font-medium">解析費（外注→内製化）</div>
-            <div className="text-xs text-text-muted">最大インパクト: {(config.irAnalysis.outsourceCostPerM2 - config.irAnalysis.internalCostPerM2).toLocaleString()}円/m2 削減</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted">{config.irAnalysis.outsourceCostPerM2}円/m2 →</span>
-            <input type="number" value={futureOverrides.irAnalysisCostPerM2}
-              onChange={(e) => onChange({ ...futureOverrides, irAnalysisCostPerM2: Number(e.target.value) || 0 })}
-              className={`w-16 border rounded px-1.5 py-0.5 text-sm text-right ${futureOverrides.irAnalysisCostPerM2 !== config.irAnalysis.outsourceCostPerM2 ? "border-green-400 bg-green-50 text-green-800" : "border-border"}`} />
-            <span className="text-xs text-text-muted">円/m2</span>
-          </div>
+      <div className="space-y-1">
+        <div className="grid grid-cols-[1fr_5rem_5rem] gap-2 text-xs text-text-muted pb-1 border-b border-gray-100">
+          <span>項目</span><span className="text-right">現状</span><span className="text-right">将来</span>
         </div>
 
-        <div className="flex items-center justify-between gap-2 p-2 rounded border border-border">
-          <div>
-            <div className="text-sm font-medium">UAV機材費（自社保有）</div>
-            <div className="text-xs text-text-muted">初日: {config.equipment.uavFirstDay.toLocaleString()}円 → 減価償却費に変更</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <input type="number" value={futureOverrides.uavFirstDay ?? config.equipment.uavFirstDay}
-              onChange={(e) => onChange({ ...futureOverrides, uavFirstDay: Number(e.target.value) || 0 })}
-              className={`w-20 border rounded px-1.5 py-0.5 text-sm text-right ${futureOverrides.uavFirstDay !== undefined && futureOverrides.uavFirstDay !== config.equipment.uavFirstDay ? "border-green-400 bg-green-50 text-green-800" : "border-border"}`} />
-            <span className="text-xs text-text-muted">円/日</span>
-          </div>
-        </div>
-      </div>
+        <p className="text-xs font-medium text-text-muted pt-1">解析費</p>
+        <FutureRow label="赤外線解析" unit="円/m2" current={config.irAnalysis.outsourceCostPerM2}
+          value={futureOverrides.irAnalysisCostPerM2} onChange={(v) => set({ irAnalysisCostPerM2: v })} />
 
-      <div className="bg-gray-50 rounded p-2 text-xs">
-        <div className="flex justify-between items-center">
-          <span className="text-text-muted">将来時の人件費（原価）</span>
-          <span className="font-medium">{futureConfig.fixedPersonnelCostPerDay.toLocaleString()}円/日</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-text-muted">将来時の解析費</span>
-          <span className="font-medium">{futureOverrides.irAnalysisCostPerM2}円/m2</span>
-        </div>
+        <p className="text-xs font-medium text-text-muted pt-2">人件費</p>
+        <FutureRow label="チーム合計" unit="円/日" current={config.fixedPersonnelCostPerDay}
+          value={futureOverrides.fixedPersonnelCostPerDay} onChange={(v) => set({ fixedPersonnelCostPerDay: v })} />
+
+        <p className="text-xs font-medium text-text-muted pt-2">機材費</p>
+        <FutureRow label="UAV損料（初日）" unit="円/日" current={config.equipment.uavFirstDay}
+          value={futureOverrides.uavFirstDay} onChange={(v) => set({ uavFirstDay: v })} />
+        <FutureRow label="UAV損料（2日目〜）" unit="円/日" current={config.equipment.uavSubsequentPerDay}
+          value={futureOverrides.uavSubsequentPerDay} onChange={(v) => set({ uavSubsequentPerDay: v })} />
+        <FutureRow label="車両損料" unit="円/日" current={config.equipment.vehiclePerDay}
+          value={futureOverrides.vehiclePerDay} onChange={(v) => set({ vehiclePerDay: v })} />
+        <FutureRow label="IRカメラ" unit="円/日" current={config.equipment.irCameraPerDay}
+          value={futureOverrides.irCameraPerDay} onChange={(v) => set({ irCameraPerDay: v })} />
+        <FutureRow label="その他機材" unit="円/日" current={config.equipment.miscPerDay}
+          value={futureOverrides.miscPerDay} onChange={(v) => set({ miscPerDay: v })} />
+
+        <p className="text-xs font-medium text-text-muted pt-2">外部委託</p>
+        <FutureRow label="ロープアクセス外注" unit="円/m2" current={config.ropeAccessOutsourcePerM2}
+          value={futureOverrides.ropeAccessOutsourcePerM2} onChange={(v) => set({ ropeAccessOutsourcePerM2: v })} />
+        <FutureRow label="報告書作成費" unit="円/件" current={config.reportFee}
+          value={futureOverrides.reportFee} onChange={(v) => set({ reportFee: v })} />
       </div>
 
       <button onClick={onReset} className="w-full text-xs py-1 border border-border rounded text-text-muted hover:bg-gray-50">

@@ -349,42 +349,44 @@ export const PRESETS: BuildingPreset[] = [
 // --- Self-Improvement Simulation Types ---
 
 export interface FutureOverrides {
+  // 解析費
   irAnalysisCostPerM2: number;
-  personnelSalesRates?: Partial<PersonnelRates>;
-  personnelCostRates?: Partial<PersonnelRates>;
-  personnelCount?: Partial<PersonnelCount>;
-  // Equipment overrides
-  uavFirstDay?: number;
-  uavSubsequentPerDay?: number;
-  vehiclePerDay?: number;
-  irCameraPerDay?: number;
-  miscPerDay?: number;
+  // 人件費（原価日額を直接上書き）
+  fixedPersonnelCostPerDay: number;
+  // 機材費（日額）
+  uavFirstDay: number;
+  uavSubsequentPerDay: number;
+  vehiclePerDay: number;
+  irCameraPerDay: number;
+  miscPerDay: number;
+  // 外部委託
+  ropeAccessOutsourcePerM2: number;
+  reportFee: number;
 }
 
 export const DEFAULT_FUTURE_OVERRIDES: FutureOverrides = {
   irAnalysisCostPerM2: DEFAULT_CONFIG.irAnalysis.internalCostPerM2,
+  fixedPersonnelCostPerDay: DEFAULT_CONFIG.fixedPersonnelCostPerDay,
+  uavFirstDay: DEFAULT_CONFIG.equipment.uavFirstDay,
+  uavSubsequentPerDay: DEFAULT_CONFIG.equipment.uavSubsequentPerDay,
+  vehiclePerDay: DEFAULT_CONFIG.equipment.vehiclePerDay,
+  irCameraPerDay: DEFAULT_CONFIG.equipment.irCameraPerDay,
+  miscPerDay: DEFAULT_CONFIG.equipment.miscPerDay,
+  ropeAccessOutsourcePerM2: DEFAULT_CONFIG.ropeAccessOutsourcePerM2,
+  reportFee: DEFAULT_CONFIG.reportFee,
 };
 
 export function applyFutureOverrides(config: CostConfig, overrides: FutureOverrides): CostConfig {
   const c: CostConfig = JSON.parse(JSON.stringify(config));
   c.irAnalysis.outsourceCostPerM2 = overrides.irAnalysisCostPerM2;
-  if (overrides.personnelSalesRates) {
-    c.personnelSalesRates = { ...c.personnelSalesRates, ...overrides.personnelSalesRates };
-  }
-  if (overrides.personnelCostRates) {
-    c.personnelCostRates = { ...c.personnelCostRates, ...overrides.personnelCostRates };
-  }
-  if (overrides.personnelCount) {
-    c.personnelCount = { ...c.personnelCount, ...overrides.personnelCount };
-  }
-  // Recalculate daily totals
-  c.fixedPersonnelSalesPerDay = calcDailyPersonnelCost(c.personnelSalesRates, c.personnelCount);
-  c.fixedPersonnelCostPerDay = calcDailyPersonnelCost(c.personnelCostRates, c.personnelCount);
-  if (overrides.uavFirstDay !== undefined) c.equipment.uavFirstDay = overrides.uavFirstDay;
-  if (overrides.uavSubsequentPerDay !== undefined) c.equipment.uavSubsequentPerDay = overrides.uavSubsequentPerDay;
-  if (overrides.vehiclePerDay !== undefined) c.equipment.vehiclePerDay = overrides.vehiclePerDay;
-  if (overrides.irCameraPerDay !== undefined) c.equipment.irCameraPerDay = overrides.irCameraPerDay;
-  if (overrides.miscPerDay !== undefined) c.equipment.miscPerDay = overrides.miscPerDay;
+  c.fixedPersonnelCostPerDay = overrides.fixedPersonnelCostPerDay;
+  c.equipment.uavFirstDay = overrides.uavFirstDay;
+  c.equipment.uavSubsequentPerDay = overrides.uavSubsequentPerDay;
+  c.equipment.vehiclePerDay = overrides.vehiclePerDay;
+  c.equipment.irCameraPerDay = overrides.irCameraPerDay;
+  c.equipment.miscPerDay = overrides.miscPerDay;
+  c.ropeAccessOutsourcePerM2 = overrides.ropeAccessOutsourcePerM2;
+  c.reportFee = overrides.reportFee;
   return c;
 }
 
