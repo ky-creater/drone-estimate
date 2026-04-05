@@ -428,11 +428,19 @@ function ConfigEditor({ config, onChange, onReset }: { config: CostConfig; onCha
   const [showConstants, setShowConstants] = useState(false);
   const isStackup = config.salesPriceMode === "stackup";
 
+  // 人件費更新ヘルパー
+  const updateSalesRate = (field: keyof typeof config.personnelSalesRates, v: number) => {
+    const rates = { ...config.personnelSalesRates, [field]: v };
+    const cnt = config.personnelCount;
+    const daily = Math.round((rates.siteManager * cnt.siteManager + rates.pilot * cnt.pilot + rates.photographer * cnt.photographer + rates.assistantOrTechB * cnt.assistantOrTechB) * 8);
+    onChange({ ...config, personnelSalesRates: rates, fixedPersonnelSalesPerDay: daily });
+  };
+
   return (
     <div className="space-y-4">
       <div>
         <div className="flex justify-between items-center mb-1">
-          <h3 className="text-sm font-bold text-accent">Step 2: 販売価格モードと単価設定</h3>
+          <h3 className="text-sm font-bold text-accent">Step 2: 販売価格の設定</h3>
           <button onClick={onReset} className="text-xs px-2 py-0.5 border border-border rounded hover:bg-gray-50">リセット</button>
         </div>
 
@@ -449,22 +457,17 @@ function ConfigEditor({ config, onChange, onReset }: { config: CostConfig; onCha
               </button>
             ))}
           </div>
-          <p className="text-xs text-text-muted mt-1.5">
-            {isStackup
-              ? "直接業務費 × 1.421（一般管理費等）+ 外部委託費 で自動算出"
-              : "ドローン面積 × 設定単価 + 解析面積 × 設定単価 で算出"}
-          </p>
         </div>
 
-        {/* 積み上げモード */}
+        {/* 積み上げモード: 自動算出の説明 */}
         {isStackup && (
-          <div className="space-y-4">
-            <SliderField label="一般管理費等率（直接業務費に加算）" value={config.overheadRatePercent}
-              onChange={(v) => onChange({ ...config, overheadRatePercent: v })} min={20} max={60} step={0.1} unit="%" />
-            <SliderField label="販管費率（売上に対する目標営業利益計算用）" value={config.sgaRatePercent}
-              onChange={(v) => onChange({ ...config, sgaRatePercent: v })} min={10} max={50} step={0.1} unit="%" />
-            <SliderField label="ロープアクセス 顧客単価（従来工法比較用）" value={config.ropeAccessPricePerM2}
-              onChange={(v) => onChange({ ...config, ropeAccessPricePerM2: v })} min={300} max={800} step={10} unit="円/m2" />
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 space-y-1.5">
+            <p className="font-medium">販売価格は原価パラメータから自動算出されます</p>
+            <div className="text-blue-700 space-y-0.5">
+              <p>販売価格 = (人件費[販売単価] + 機材費) × {(1 + config.overheadRatePercent / 100).toFixed(3)} + 外部委託費</p>
+              <p className="opacity-75">一般管理費等率: {config.overheadRatePercent}% / 販管費率: {config.sgaRatePercent}%</p>
+            </div>
+            <p className="text-blue-600 pt-1">原価の内訳を変更するには「上級者向けパラメータ」を開いてください</p>
           </div>
         )}
 
@@ -475,61 +478,41 @@ function ConfigEditor({ config, onChange, onReset }: { config: CostConfig; onCha
               onChange={(v) => onChange({ ...config, unitPriceDronePerM2: v })} min={100} max={500} step={10} unit="円/m2" />
             <SliderField label="解析 単価" value={config.unitPriceAnalysisPerM2}
               onChange={(v) => onChange({ ...config, unitPriceAnalysisPerM2: v })} min={30} max={200} step={5} unit="円/m2" />
-            <SliderField label="ロープアクセス 顧客単価" value={config.ropeAccessPricePerM2}
-              onChange={(v) => onChange({ ...config, ropeAccessPricePerM2: v })} min={300} max={800} step={10} unit="円/m2" />
           </div>
         )}
       </div>
 
-      {/* 上級者向け: 原価パラメータ */}
+      {/* 上級者向け: 全パラメータ */}
       <div className="border-t border-border pt-3">
         <button onClick={() => setShowConstants(!showConstants)} className="flex items-center gap-2 text-xs text-text-muted hover:text-text-secondary">
           <span className={`transition-transform ${showConstants ? "rotate-90" : ""}`}>&#9654;</span>
-          原価パラメータ（上級者向け）
+          上級者向けパラメータ
         </button>
         {showConstants && (
           <div className="mt-3 space-y-3 text-xs">
+            {/* 販売レート */}
             <div className="bg-gray-50 rounded p-3">
               <h4 className="font-bold text-text-secondary mb-1">人件費（販売単価・国交省R7 / 時）</h4>
               <p className="text-xs text-text-muted mb-2">1日 = 8時間換算。原価単価はStep 3で調整</p>
               <div className="space-y-1.5">
                 <ConstantField label="現場責任者 ×1" value={config.personnelSalesRates.siteManager} unit="円/h"
                   isDefault={config.personnelSalesRates.siteManager === DEFAULT_CONFIG.personnelSalesRates.siteManager}
-                  onChange={(v) => {
-                    const rates = { ...config.personnelSalesRates, siteManager: v };
-                    const cnt = config.personnelCount;
-                    const daily = Math.round((rates.siteManager * cnt.siteManager + rates.pilot * cnt.pilot + rates.photographer * cnt.photographer + rates.assistantOrTechB * cnt.assistantOrTechB) * 8);
-                    onChange({ ...config, personnelSalesRates: rates, fixedPersonnelSalesPerDay: daily });
-                  }} />
+                  onChange={(v) => updateSalesRate("siteManager", v)} />
                 <ConstantField label="操縦士 ×1" value={config.personnelSalesRates.pilot} unit="円/h"
                   isDefault={config.personnelSalesRates.pilot === DEFAULT_CONFIG.personnelSalesRates.pilot}
-                  onChange={(v) => {
-                    const rates = { ...config.personnelSalesRates, pilot: v };
-                    const cnt = config.personnelCount;
-                    const daily = Math.round((rates.siteManager * cnt.siteManager + rates.pilot * cnt.pilot + rates.photographer * cnt.photographer + rates.assistantOrTechB * cnt.assistantOrTechB) * 8);
-                    onChange({ ...config, personnelSalesRates: rates, fixedPersonnelSalesPerDay: daily });
-                  }} />
+                  onChange={(v) => updateSalesRate("pilot", v)} />
                 <ConstantField label="撮影士 ×1" value={config.personnelSalesRates.photographer} unit="円/h"
                   isDefault={config.personnelSalesRates.photographer === DEFAULT_CONFIG.personnelSalesRates.photographer}
-                  onChange={(v) => {
-                    const rates = { ...config.personnelSalesRates, photographer: v };
-                    const cnt = config.personnelCount;
-                    const daily = Math.round((rates.siteManager * cnt.siteManager + rates.pilot * cnt.pilot + rates.photographer * cnt.photographer + rates.assistantOrTechB * cnt.assistantOrTechB) * 8);
-                    onChange({ ...config, personnelSalesRates: rates, fixedPersonnelSalesPerDay: daily });
-                  }} />
+                  onChange={(v) => updateSalesRate("photographer", v)} />
                 <ConstantField label="助手/技師B ×2" value={config.personnelSalesRates.assistantOrTechB} unit="円/h(1人)"
                   isDefault={config.personnelSalesRates.assistantOrTechB === DEFAULT_CONFIG.personnelSalesRates.assistantOrTechB}
-                  onChange={(v) => {
-                    const rates = { ...config.personnelSalesRates, assistantOrTechB: v };
-                    const cnt = config.personnelCount;
-                    const daily = Math.round((rates.siteManager * cnt.siteManager + rates.pilot * cnt.pilot + rates.photographer * cnt.photographer + rates.assistantOrTechB * cnt.assistantOrTechB) * 8);
-                    onChange({ ...config, personnelSalesRates: rates, fixedPersonnelSalesPerDay: daily });
-                  }} />
+                  onChange={(v) => updateSalesRate("assistantOrTechB", v)} />
               </div>
               <div className="mt-1.5 pt-1.5 border-t border-border font-bold text-text-secondary">
-                販売人件費計: {config.fixedPersonnelSalesPerDay.toLocaleString()}円/日
+                販売人件費計: {config.fixedPersonnelSalesPerDay.toLocaleString()}円/日（5名）
               </div>
             </div>
+            {/* 機材・解析 */}
             <div className="bg-gray-50 rounded p-3">
               <h4 className="font-bold text-text-secondary mb-2">機材・解析</h4>
               <div className="space-y-1.5">
@@ -553,6 +536,7 @@ function ConfigEditor({ config, onChange, onReset }: { config: CostConfig; onCha
                   onChange={(v) => onChange({ ...config, irAnalysis: { ...config.irAnalysis, internalCostPerM2: v } })} />
               </div>
             </div>
+            {/* 調査能力・外注費 */}
             <div className="bg-gray-50 rounded p-3">
               <h4 className="font-bold text-text-secondary mb-2">調査能力・外注費</h4>
               <div className="space-y-1.5">
@@ -571,6 +555,21 @@ function ConfigEditor({ config, onChange, onReset }: { config: CostConfig; onCha
                 <ConstantField label="報告書作成費" value={config.reportFee} unit="円/件"
                   isDefault={config.reportFee === DEFAULT_CONFIG.reportFee}
                   onChange={(v) => onChange({ ...config, reportFee: v })} />
+              </div>
+            </div>
+            {/* レート・比較 */}
+            <div className="bg-gray-50 rounded p-3">
+              <h4 className="font-bold text-text-secondary mb-2">レート・比較基準</h4>
+              <div className="space-y-1.5">
+                <ConstantField label="一般管理費等率" value={config.overheadRatePercent} unit="%"
+                  isDefault={config.overheadRatePercent === DEFAULT_CONFIG.overheadRatePercent}
+                  onChange={(v) => onChange({ ...config, overheadRatePercent: v })} />
+                <ConstantField label="販管費率" value={config.sgaRatePercent} unit="%"
+                  isDefault={config.sgaRatePercent === DEFAULT_CONFIG.sgaRatePercent}
+                  onChange={(v) => onChange({ ...config, sgaRatePercent: v })} />
+                <ConstantField label="ロープアクセス比較単価" value={config.ropeAccessPricePerM2} unit="円/m2"
+                  isDefault={config.ropeAccessPricePerM2 === DEFAULT_CONFIG.ropeAccessPricePerM2}
+                  onChange={(v) => onChange({ ...config, ropeAccessPricePerM2: v })} />
               </div>
             </div>
           </div>
