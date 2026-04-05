@@ -1,41 +1,57 @@
 // ============================================================
-// ミラテクドローン 見積もりエンジン v2.0
-// 実MTGフィードバック反映版
+// ミラテクドローン 見積もりエンジン v3.0
+// 価格モデル_外壁点検_v07 反映版
 // ============================================================
 
 // --- Input Types ---
 
 export type AccessLevel = "drone-possible" | "drone-impossible";
 export type InspectionMethod = "infrared" | "percussion" | "visual";
+export type SalesPriceMode = "stackup" | "unit-price";
 
 export interface BuildingInput {
   name: string;
-  totalArea: number;          // 総外壁面積 (m2)
-  floors: number;             // 階数
-  height: number;             // 高さ (m)
-  faces: FaceInput[];         // 各面の情報
+  totalArea: number;   // 総外壁面積 (m2) — メイン入力
+  height: number;      // 高さ (m) — 参考表示用
+  faces: FaceInput[];
 }
 
 export interface FaceInput {
-  name: string;               // 面名 (北面、南面等)
-  area: number;               // 面積 (m2)
-  accessLevel: AccessLevel;   // ○ラインドローンシステムで実施可能 / ×実施不可
-  inspectionMethod: InspectionMethod; // 赤外線・打診・目視
-  note: string;               // 注記欄
-  ropeAccessArea: number;     // ロープアクセス対応面積 (no-drone時)
-  groundIRPossible: boolean;  // 地上赤外線調査可能か（低層部）
-  groundIRArea: number;       // 地上赤外線調査対象面積 (m2)
-  obstacles: string[];        // 障害物メモ
+  name: string;
+  area: number;
+  accessLevel: AccessLevel;
+  inspectionMethod: InspectionMethod;
+  note: string;
+  ropeAccessArea: number;
+  groundIRPossible: boolean;
+  groundIRArea: number;
+  obstacles: string[];
+}
+
+// --- Personnel Rates (円/時) ---
+
+export interface PersonnelRates {
+  siteManager: number;       // 調査現場責任者（主任技師相当）
+  pilot: number;             // 操縦士
+  photographer: number;      // 撮影士
+  assistantOrTechB: number;  // 撮影助手 / 技師B
+}
+
+export interface PersonnelCount {
+  siteManager: number;
+  pilot: number;
+  photographer: number;
+  assistantOrTechB: number;
 }
 
 // --- Configuration ---
 
 export interface EquipmentConfig {
-  drone: number;
-  irCamera: number;
-  lineDroneSystem: number;
-  vehicle: number;              // 車両損料（日額）
-  misc: number;
+  uavFirstDay: number;         // UAV損料 初日
+  uavSubsequentPerDay: number; // UAV損料 2日目以降
+  vehiclePerDay: number;       // 車両損料（日額）
+  irCameraPerDay: number;      // 赤外線カメラ損料
+  miscPerDay: number;          // その他機材
 }
 
 export interface IRAnalysisConfig {
@@ -43,26 +59,26 @@ export interface IRAnalysisConfig {
   internalCostPerM2: number;
 }
 
-// 職種別単価（国交省R7年度 設計業務委託等技術者単価準拠）
-export interface PersonnelDetail {
-  siteManager: number;     // 調査現場責任者（主任技師相当）×1
-  pilot: number;           // 操縦士 ×1
-  photographer: number;    // 撮影士 ×1
-  assistantOrTechB: number; // 撮影助手 or 技師(B) ×2
-}
-
 export interface CostConfig {
-  teamCostPerDay: number;     // チーム全体（自動計算も可能）
-  personnelDetail: PersonnelDetail; // 職種別内訳（参考表示用）
-  droneCapacityPerDay: number;
-  groundIRCapacityPerDay: number;
+  personnelSalesRates: PersonnelRates;
+  personnelCostRates: PersonnelRates;
+  personnelCount: PersonnelCount;
+  fixedPersonnelSalesPerDay: number;  // 279,875円 (sales rates × 8h × 人数)
+  fixedPersonnelCostPerDay: number;   // 197,700円 (cost rates × 8h × 人数)
+  droneCapacityPerHour: number;       // m2/h ドローン調査能力
+  groundIRCapacityPerHour: number;    // m2/h 地上赤外線調査能力
+  workHoursPerDay: number;            // 飛行作業時間/日（6h）
   equipment: EquipmentConfig;
   irAnalysis: IRAnalysisConfig;
-  transportationPerDay: number;  // 熊谷→都心部往復
-  adminRatePercent: number;
-  unitPricePerM2: number;
-  ropeAccessPricePerM2: number;
-  ropeAccessPercussionPerM2: number; // 下請打診単価
+  ropeAccessOutsourcePerM2: number;   // ロープアクセス外注打診単価
+  groundSurveyOutsourcePerM2: number; // 地上調査外注単価
+  reportFee: number;                  // 報告書作成費（固定）
+  overheadRatePercent: number;        // 一般管理費等率 42.1%
+  sgaRatePercent: number;             // 販管費率 27.7%（営業利益計算用）
+  salesPriceMode: SalesPriceMode;
+  unitPriceDronePerM2: number;        // 面積単価モード: ドローン赤外線単価
+  unitPriceAnalysisPerM2: number;     // 面積単価モード: 解析単価
+  ropeAccessPricePerM2: number;       // 従来工法（ロープアクセス）比較単価
 }
 
 // --- Output Types ---
@@ -78,14 +94,15 @@ export interface FeasibilityCheck {
 }
 
 export interface CostBreakdown {
-  personnel: number;
-  equipment: number;
-  irAnalysis: number;
-  transportation: number;
-  ropeAccessSubcontract: number;
-  directCost: number;
-  adminCost: number;
-  totalCost: number;
+  personnel: number;             // 人件費（コスト単価ベース）
+  equipment: number;             // 機材損料
+  irAnalysis: number;            // 解析費
+  ropeAccessSubcontract: number; // ロープアクセス外注
+  reportFee: number;             // 報告書費
+  externalCommission: number;    // 外部委託費合計（ロープ+報告書+解析外注）
+  directBusinessCost: number;    // 直接業務費（人件費+機材）
+  overhead: number;              // 一般管理費等 42.1%（直接業務費に適用）
+  totalCost: number;             // 合計原価（コストベース）
 }
 
 export interface FaceResult {
@@ -94,18 +111,32 @@ export interface FaceResult {
   accessLevel: AccessLevel;
   inspectionMethod: InspectionMethod;
   note: string;
-  pattern: string;    // 適用パターン名
+  pattern: string;
   droneArea: number;
   groundIRArea: number;
   ropeAccessArea: number;
 }
 
-export interface CustomerEstimate {
-  droneIRFee: number;          // ドローン赤外線調査
-  groundIRFee: number;         // 地上赤外線
-  ropePercussionFee: number;   // ロープアクセス打診
-  analysisFee: number;         // 解析費
-  totalEstimate: number;
+export interface ScenarioResult {
+  label: string;
+  costBreakdown: CostBreakdown;
+  salesPrice: number;             // 販売価格（積み上げ or 面積単価）
+  stackupPrice: number;           // 積み上げ価格（参考）
+  impliedDroneUnitPrice: number;  // 面積単価換算 円/m2
+  grossProfit: number;            // 粗利 = 販売価格 - 合計原価
+  grossProfitRate: number;        // 粗利率
+  sgaCost: number;                // 販管費 = 販売価格 × 27.7%
+  operatingProfit: number;        // 営業利益 = 粗利 - 販管費
+  operatingProfitRate: number;    // 営業利益率
+  surveyDays: number;
+  shootingHours: number;
+  droneArea: number;
+  groundIRArea: number;
+  ropeAccessArea: number;
+  perM2: { sales: number; cost: number; operatingProfit: number };
+  // Legacy aliases for backward compatibility
+  profit: number;
+  profitRate: number;
 }
 
 export interface ComparisonResult {
@@ -115,18 +146,6 @@ export interface ComparisonResult {
   savingsPercent: number;
 }
 
-export interface ScenarioResult {
-  label: string;
-  costBreakdown: CostBreakdown;
-  salesPrice: number;
-  customerEstimate: CustomerEstimate;
-  grossProfit: number;      // 粗利 = 売上 - 直接原価
-  grossProfitRate: number;  // 粗利率
-  profit: number;           // 営業利益 = 粗利 - 一般管理費
-  profitRate: number;       // 営業利益率
-  perM2: { sales: number; cost: number; profit: number };
-}
-
 export interface EstimateResult {
   feasibility: FeasibilityCheck;
   surveyDays: number;
@@ -134,48 +153,79 @@ export interface EstimateResult {
   droneArea: number;
   groundIRArea: number;
   ropeAccessArea: number;
-  current: ScenarioResult;  // 現状（解析外注）
-  future: ScenarioResult;   // 将来（自社化後）
+  current: ScenarioResult;
+  future: ScenarioResult;
   comparison: ComparisonResult;
 }
 
 // --- Defaults ---
 
-// 国交省R7年度単価ベースのデフォルト値
-export const DEFAULT_PERSONNEL: PersonnelDetail = {
-  siteManager: 66900,      // 主任技師（設計業務）
-  pilot: 56300,            // 操縦士（航空・船舶）
-  photographer: 48200,     // 撮影士（航空・船舶）
-  assistantOrTechB: 36400, // 撮影助手（航空・船舶）※技師Bなら48,500円
+// 国交省R7年度 設計業務委託等技術者単価
+export const DEFAULT_PERSONNEL_SALES_RATES: PersonnelRates = {
+  siteManager: 8363,
+  pilot: 7038,
+  photographer: 6025,
+  assistantOrTechB: 4550,
 };
 
-// チーム合計: 66,900 + 56,300 + 48,200 + 36,400×2 = 244,200円
-export const DEFAULT_TEAM_COST = DEFAULT_PERSONNEL.siteManager
-  + DEFAULT_PERSONNEL.pilot
-  + DEFAULT_PERSONNEL.photographer
-  + DEFAULT_PERSONNEL.assistantOrTechB * 2;
+// 原価計算指標単価
+export const DEFAULT_PERSONNEL_COST_RATES: PersonnelRates = {
+  siteManager: 6400,
+  pilot: 4600,
+  photographer: 4000,
+  assistantOrTechB: 3100,
+};
+
+export const DEFAULT_PERSONNEL_COUNT: PersonnelCount = {
+  siteManager: 1,
+  pilot: 1,
+  photographer: 1,
+  assistantOrTechB: 2,
+};
+
+function calcDailyPersonnelCost(
+  rates: PersonnelRates,
+  count: PersonnelCount,
+  billingHoursPerDay = 8
+): number {
+  return Math.round(
+    (rates.siteManager * count.siteManager +
+      rates.pilot * count.pilot +
+      rates.photographer * count.photographer +
+      rates.assistantOrTechB * count.assistantOrTechB) *
+      billingHoursPerDay
+  );
+}
 
 export const DEFAULT_CONFIG: CostConfig = {
-  teamCostPerDay: DEFAULT_TEAM_COST, // 244,200円（国交省R7単価準拠）
-  personnelDetail: { ...DEFAULT_PERSONNEL },
-  droneCapacityPerDay: 2500,
-  groundIRCapacityPerDay: 1500,
+  personnelSalesRates: { ...DEFAULT_PERSONNEL_SALES_RATES },
+  personnelCostRates: { ...DEFAULT_PERSONNEL_COST_RATES },
+  personnelCount: { ...DEFAULT_PERSONNEL_COUNT },
+  fixedPersonnelSalesPerDay: calcDailyPersonnelCost(DEFAULT_PERSONNEL_SALES_RATES, DEFAULT_PERSONNEL_COUNT), // ≈279,875
+  fixedPersonnelCostPerDay: calcDailyPersonnelCost(DEFAULT_PERSONNEL_COST_RATES, DEFAULT_PERSONNEL_COUNT),   // ≈197,700
+  droneCapacityPerHour: 636,
+  groundIRCapacityPerHour: 750,
+  workHoursPerDay: 6,
   equipment: {
-    drone: 25000,              // ドローン機材損料（倉田さん回答: 約25,000円/日）
-    irCamera: 10000,
-    lineDroneSystem: 0,        // ラインドローンシステム損料
-    vehicle: 0,                // 車両損料（要確認: 車両運搬費用）
-    misc: 5000,
+    uavFirstDay: 41160,
+    uavSubsequentPerDay: 26440,
+    vehiclePerDay: 26000,
+    irCameraPerDay: 10000,
+    miscPerDay: 5000,
   },
   irAnalysis: {
-    outsourceCostPerM2: 120,   // 解析外注
-    internalCostPerM2: 60,     // 自社実施
+    outsourceCostPerM2: 120,
+    internalCostPerM2: 60,
   },
-  transportationPerDay: 8000,  // 熊谷→都心部往復（倉田さん: 片道3,000-5,000円）
-  adminRatePercent: 20,
-  unitPricePerM2: 350,
+  ropeAccessOutsourcePerM2: 350,
+  groundSurveyOutsourcePerM2: 100,
+  reportFee: 150000,
+  overheadRatePercent: 42.1,
+  sgaRatePercent: 27.7,
+  salesPriceMode: "stackup",
+  unitPriceDronePerM2: 210,
+  unitPriceAnalysisPerM2: 60,
   ropeAccessPricePerM2: 500,
-  ropeAccessPercussionPerM2: 300,
 };
 
 export function createDefaultFace(name: string, area: number): FaceInput {
@@ -198,7 +248,6 @@ export interface BuildingPreset {
   name: string;
   label: string;
   totalArea: number;
-  floors: number;
   height: number;
   faces: FaceInput[];
 }
@@ -208,7 +257,6 @@ export const PRESETS: BuildingPreset[] = [
     name: "小規模ビル",
     label: "小規模ビル (3,000m2)",
     totalArea: 3000,
-    floors: 8,
     height: 30,
     faces: [
       createDefaultFace("北面", 900),
@@ -221,7 +269,6 @@ export const PRESETS: BuildingPreset[] = [
     name: "中規模ビル",
     label: "中規模ビル (8,000m2)",
     totalArea: 8000,
-    floors: 15,
     height: 55,
     faces: [
       createDefaultFace("北面", 2400),
@@ -234,7 +281,6 @@ export const PRESETS: BuildingPreset[] = [
     name: "大規模ビル",
     label: "大規模ビル (15,000m2)",
     totalArea: 15000,
-    floors: 25,
     height: 95,
     faces: [
       createDefaultFace("北面", 4500),
@@ -247,7 +293,6 @@ export const PRESETS: BuildingPreset[] = [
     name: "東劇ビル",
     label: "東劇ビル (17,000m2)",
     totalArea: 17000,
-    floors: 19,
     height: 70,
     faces: [
       {
@@ -266,8 +311,6 @@ export const PRESETS: BuildingPreset[] = [
       },
       {
         ...createDefaultFace("南面", 4000),
-        accessLevel: "drone-possible" as AccessLevel,
-        inspectionMethod: "infrared" as InspectionMethod,
         note: "ラインドローンシステムでの赤外線調査が可能",
       },
       {
@@ -279,8 +322,6 @@ export const PRESETS: BuildingPreset[] = [
       },
       {
         ...createDefaultFace("低層部", 3000),
-        accessLevel: "drone-possible" as AccessLevel,
-        inspectionMethod: "infrared" as InspectionMethod,
         groundIRPossible: true,
         groundIRArea: 3000,
         note: "ハンディ赤外線カメラにて診断",
@@ -291,7 +332,6 @@ export const PRESETS: BuildingPreset[] = [
     name: "マンション",
     label: "マンション (6,000m2)",
     totalArea: 6000,
-    floors: 14,
     height: 42,
     faces: [
       createDefaultFace("北面", 1800),
@@ -306,7 +346,373 @@ export const PRESETS: BuildingPreset[] = [
   },
 ];
 
-// --- Sensitivity Analysis Types ---
+// --- Self-Improvement Simulation Types ---
+
+export interface FutureOverrides {
+  irAnalysisCostPerM2: number;
+  personnelSalesRates?: Partial<PersonnelRates>;
+  personnelCostRates?: Partial<PersonnelRates>;
+  personnelCount?: Partial<PersonnelCount>;
+  // Equipment overrides
+  uavFirstDay?: number;
+  uavSubsequentPerDay?: number;
+  vehiclePerDay?: number;
+  irCameraPerDay?: number;
+  miscPerDay?: number;
+}
+
+export const DEFAULT_FUTURE_OVERRIDES: FutureOverrides = {
+  irAnalysisCostPerM2: DEFAULT_CONFIG.irAnalysis.internalCostPerM2,
+};
+
+export function applyFutureOverrides(config: CostConfig, overrides: FutureOverrides): CostConfig {
+  const c: CostConfig = JSON.parse(JSON.stringify(config));
+  c.irAnalysis.outsourceCostPerM2 = overrides.irAnalysisCostPerM2;
+  if (overrides.personnelSalesRates) {
+    c.personnelSalesRates = { ...c.personnelSalesRates, ...overrides.personnelSalesRates };
+  }
+  if (overrides.personnelCostRates) {
+    c.personnelCostRates = { ...c.personnelCostRates, ...overrides.personnelCostRates };
+  }
+  if (overrides.personnelCount) {
+    c.personnelCount = { ...c.personnelCount, ...overrides.personnelCount };
+  }
+  // Recalculate daily totals
+  c.fixedPersonnelSalesPerDay = calcDailyPersonnelCost(c.personnelSalesRates, c.personnelCount);
+  c.fixedPersonnelCostPerDay = calcDailyPersonnelCost(c.personnelCostRates, c.personnelCount);
+  if (overrides.uavFirstDay !== undefined) c.equipment.uavFirstDay = overrides.uavFirstDay;
+  if (overrides.uavSubsequentPerDay !== undefined) c.equipment.uavSubsequentPerDay = overrides.uavSubsequentPerDay;
+  if (overrides.vehiclePerDay !== undefined) c.equipment.vehiclePerDay = overrides.vehiclePerDay;
+  if (overrides.irCameraPerDay !== undefined) c.equipment.irCameraPerDay = overrides.irCameraPerDay;
+  if (overrides.miscPerDay !== undefined) c.equipment.miscPerDay = overrides.miscPerDay;
+  return c;
+}
+
+// --- Feasibility Check ---
+
+export function checkFeasibility(building: BuildingInput): FeasibilityCheck {
+  const items: FeasibilityItem[] = [];
+
+  if (building.height > 150) {
+    items.push({ level: "blocker", message: `建物高さ ${building.height}m は飛行限界(150m)を超過しています` });
+  } else if (building.height > 100) {
+    items.push({ level: "warning", message: `建物高さ ${building.height}m — 高高度飛行の許可申請が必要です` });
+  } else {
+    items.push({ level: "ok", message: `建物高さ ${building.height}m — 標準飛行範囲内` });
+  }
+
+  const droneFaces = building.faces.filter((f) => f.accessLevel === "drone-possible");
+  const noDroneFaces = building.faces.filter((f) => f.accessLevel === "drone-impossible");
+
+  if (noDroneFaces.length > 0) {
+    const totalNoDrone = noDroneFaces.reduce((sum, f) => sum + f.area, 0);
+    if (droneFaces.length === 0) {
+      items.push({ level: "blocker", message: "全面がドローンアクセス不可 — ロープアクセス等の代替手法が必要です" });
+    } else {
+      items.push({
+        level: "warning",
+        message: `${noDroneFaces.map((f) => f.name).join("、")}がドローン不可（${totalNoDrone.toLocaleString()}m2）— ロープアクセス打診で対応`,
+      });
+    }
+  } else {
+    items.push({ level: "ok", message: "全面ドローンアクセス可能" });
+  }
+
+  if (droneFaces.length > 0) {
+    items.push({ level: "ok", message: `${droneFaces.map((f) => f.name).join("、")}でラインドローンシステムによる調査が可能` });
+  }
+
+  const facesWithObstacles = building.faces.filter((f) => f.obstacles.length > 0);
+  if (facesWithObstacles.length > 0) {
+    items.push({
+      level: "warning",
+      message: `障害物あり: ${facesWithObstacles.map((f) => `${f.name}(${f.obstacles.join(",")})`).join("、")}`,
+    });
+  }
+
+  const hasBlocker = items.some((i) => i.level === "blocker");
+  const hasWarning = items.some((i) => i.level === "warning");
+  return { overall: hasBlocker ? "blocker" : hasWarning ? "warning" : "ok", items };
+}
+
+// --- Face Pattern Classification ---
+
+function classifyFacePattern(face: FaceInput): string {
+  if (face.accessLevel === "drone-possible" && face.inspectionMethod === "infrared") {
+    return "ラインドローンシステム＋赤外線";
+  }
+  if (face.accessLevel === "drone-impossible" && face.inspectionMethod === "percussion") {
+    return "ロープアクセス＋打診";
+  }
+  if (face.accessLevel === "drone-impossible" && face.inspectionMethod === "visual") {
+    return "目視検査";
+  }
+  if (face.groundIRPossible && face.groundIRArea > 0) {
+    return "地上赤外線";
+  }
+  const methodLabel = face.inspectionMethod === "infrared" ? "赤外線" : face.inspectionMethod === "percussion" ? "打診" : "目視";
+  const accessLabel = face.accessLevel === "drone-possible" ? "ラインドローンシステム" : "ロープアクセス";
+  return `${accessLabel}＋${methodLabel}`;
+}
+
+// --- Core Scenario Calculation ---
+
+function calcEquipmentCost(eq: EquipmentConfig, surveyDays: number): number {
+  if (surveyDays <= 0) return 0;
+  const firstDay = eq.uavFirstDay + eq.vehiclePerDay + eq.irCameraPerDay + eq.miscPerDay;
+  const subsequent = (eq.uavSubsequentPerDay + eq.vehiclePerDay + eq.irCameraPerDay + eq.miscPerDay) * (surveyDays - 1);
+  return firstDay + subsequent;
+}
+
+function calculateScenario(
+  label: string,
+  irMode: "outsource" | "internal",
+  config: CostConfig,
+  droneArea: number,
+  groundIRArea: number,
+  ropeAccessArea: number,
+): ScenarioResult {
+  const irArea = droneArea + groundIRArea;
+
+  // Survey timing (hourly capacity model)
+  const droneHours = droneArea > 0 ? droneArea / config.droneCapacityPerHour : 0;
+  const groundIRHours = groundIRArea > 0 ? groundIRArea / config.groundIRCapacityPerHour : 0;
+  // Drone and ground IR can be done on separate days, but usually concurrent
+  const shootingHours = Math.max(droneHours, groundIRHours);
+  const surveyDays = irArea > 0 || ropeAccessArea > 0
+    ? Math.max(Math.ceil(shootingHours / config.workHoursPerDay), 1)
+    : 0;
+
+  // === COST CALCULATION (コスト単価ベース) ===
+  const personnelCost = config.fixedPersonnelCostPerDay * surveyDays;
+  const equipmentCost = calcEquipmentCost(config.equipment, surveyDays);
+  const irRate = irMode === "outsource"
+    ? config.irAnalysis.outsourceCostPerM2
+    : config.irAnalysis.internalCostPerM2;
+  const irAnalysisCost = irArea * irRate;
+  const ropeSubcontract = ropeAccessArea * config.ropeAccessOutsourcePerM2;
+  const externalCommission = irAnalysisCost + ropeSubcontract + (irArea + ropeAccessArea > 0 ? config.reportFee : 0);
+  // 合計原価 = 人件費 + 機材 + 外部委託費（一般管理費等なし）
+  const totalCost = personnelCost + equipmentCost + externalCommission;
+
+  const costBreakdown: CostBreakdown = {
+    personnel: personnelCost,
+    equipment: equipmentCost,
+    irAnalysis: irAnalysisCost,
+    ropeAccessSubcontract: ropeSubcontract,
+    reportFee: irArea + ropeAccessArea > 0 ? config.reportFee : 0,
+    externalCommission,
+    directBusinessCost: personnelCost + equipmentCost,
+    overhead: Math.round((personnelCost + equipmentCost) * (config.overheadRatePercent / 100)),
+    totalCost,
+  };
+
+  // === SALES PRICE CALCULATION (積み上げ) ===
+  // 積み上げ価格 = (人件費[販売単価] + 機材) × (1 + 42.1%) + 外部委託費
+  const personnelSales = config.fixedPersonnelSalesPerDay * surveyDays;
+  const directBusinessCostSales = personnelSales + equipmentCost;
+  const overhead = Math.round(directBusinessCostSales * (config.overheadRatePercent / 100));
+  const stackupPrice = directBusinessCostSales + overhead + externalCommission;
+
+  // 面積単価モード
+  let salesPrice: number;
+  if (config.salesPriceMode === "unit-price") {
+    salesPrice =
+      droneArea * config.unitPriceDronePerM2 +
+      irArea * config.unitPriceAnalysisPerM2 +
+      ropeSubcontract +
+      (irArea + ropeAccessArea > 0 ? config.reportFee : 0);
+  } else {
+    salesPrice = stackupPrice;
+  }
+
+  // 面積単価換算（参考）
+  const droneAnalysisArea = Math.max(droneArea + groundIRArea, 1);
+  const impliedDroneUnitPrice = Math.round(
+    (salesPrice - ropeSubcontract - (irArea + ropeAccessArea > 0 ? config.reportFee : 0)) / droneAnalysisArea
+  );
+
+  // === PROFIT CALCULATION ===
+  const grossProfit = salesPrice - totalCost;
+  const grossProfitRate = salesPrice > 0 ? (grossProfit / salesPrice) * 100 : 0;
+  const sgaCost = Math.round(salesPrice * (config.sgaRatePercent / 100));
+  const operatingProfit = grossProfit - sgaCost;
+  const operatingProfitRate = salesPrice > 0 ? (operatingProfit / salesPrice) * 100 : 0;
+
+  const totalInspectArea = droneArea + groundIRArea + ropeAccessArea;
+  const perM2 = {
+    sales: totalInspectArea > 0 ? Math.round(salesPrice / totalInspectArea) : 0,
+    cost: totalInspectArea > 0 ? Math.round(totalCost / totalInspectArea) : 0,
+    operatingProfit: totalInspectArea > 0 ? Math.round(operatingProfit / totalInspectArea) : 0,
+  };
+
+  return {
+    label,
+    costBreakdown,
+    salesPrice,
+    stackupPrice,
+    impliedDroneUnitPrice,
+    grossProfit,
+    grossProfitRate,
+    sgaCost,
+    operatingProfit,
+    operatingProfitRate,
+    surveyDays,
+    shootingHours,
+    droneArea,
+    groundIRArea,
+    ropeAccessArea,
+    perM2,
+    // Legacy aliases
+    profit: operatingProfit,
+    profitRate: operatingProfitRate,
+  };
+}
+
+// --- Main Estimate Calculation ---
+
+export function calculateEstimate(
+  building: BuildingInput,
+  config: CostConfig,
+  futureOverrides?: FutureOverrides
+): EstimateResult {
+  const feasibility = checkFeasibility(building);
+
+  const faceResults: FaceResult[] = building.faces.map((face) => {
+    const isDrone = face.accessLevel === "drone-possible";
+    const clampedGroundIR = Math.min(face.groundIRArea, face.area);
+    const fDroneArea = isDrone ? face.area - clampedGroundIR : 0;
+    const fRopeArea =
+      face.accessLevel === "drone-impossible"
+        ? Math.min(face.ropeAccessArea || face.area, face.area)
+        : 0;
+    return {
+      name: face.name,
+      area: face.area,
+      accessLevel: face.accessLevel,
+      inspectionMethod: face.inspectionMethod,
+      note: face.note,
+      pattern: classifyFacePattern(face),
+      droneArea: Math.max(0, fDroneArea),
+      groundIRArea: clampedGroundIR,
+      ropeAccessArea: fRopeArea,
+    };
+  });
+
+  const droneArea = faceResults.reduce((s, f) => s + f.droneArea, 0);
+  const groundIRArea = faceResults.reduce((s, f) => s + f.groundIRArea, 0);
+  const ropeAccessArea = faceResults.reduce((s, f) => s + f.ropeAccessArea, 0);
+
+  const current = calculateScenario("現状（解析外注）", "outsource", config, droneArea, groundIRArea, ropeAccessArea);
+
+  const ov = futureOverrides ?? DEFAULT_FUTURE_OVERRIDES;
+  const futureConfig = applyFutureOverrides(config, ov);
+  const future = calculateScenario("将来（自社化後）", "outsource", futureConfig, droneArea, groundIRArea, ropeAccessArea);
+
+  const totalArea = droneArea + groundIRArea + ropeAccessArea;
+  const ropeAccessPrice = totalArea * config.ropeAccessPricePerM2;
+  const dronePrice = current.salesPrice;
+  const savings = ropeAccessPrice - dronePrice;
+  const savingsPercent = ropeAccessPrice > 0 ? (savings / ropeAccessPrice) * 100 : 0;
+
+  return {
+    feasibility,
+    surveyDays: current.surveyDays,
+    faceResults,
+    droneArea,
+    groundIRArea,
+    ropeAccessArea,
+    current,
+    future,
+    comparison: { dronePrice, ropeAccessPrice, savings, savingsPercent },
+  };
+}
+
+// --- Height × Face Count Sensitivity Analysis (新型) ---
+
+export interface SensitivityFaceResult {
+  droneCount: number;
+  droneArea: number;
+  ropeArea: number;
+  totalCost: number;
+  stackupPrice: number;
+  grossProfit: number;
+  grossProfitRate: number;
+  sgaCost: number;
+  operatingProfit: number;
+  operatingProfitRate: number;
+  ropeAccessPrice: number;
+  ropeDiscountRate: number;
+  isViable: boolean;
+  headroom: number;
+  impliedDroneUnit: number;
+}
+
+export interface SensitivityHeightRow {
+  height: number;
+  totalArea: number;
+  faceResults: SensitivityFaceResult[];
+}
+
+export interface HeightSensitivityResult {
+  rows: SensitivityHeightRow[];
+  faceCounts: number[];
+}
+
+// 高さ → 総外壁面積 変換係数 (m2 per meter of building height)
+export const DEFAULT_AREA_PER_METER = 100; // 100 m2/m (=10m幅の4面ビル: 4×25m幅×height)
+
+export function calculateHeightSensitivity(
+  config: CostConfig,
+  heights: number[] = [30, 50, 70, 90, 110, 130, 150],
+  faceCounts: number[] = [0, 1, 2, 3, 4],
+  areaPerMeter: number = DEFAULT_AREA_PER_METER
+): HeightSensitivityResult {
+  const rows: SensitivityHeightRow[] = heights.map((height) => {
+    const totalArea = height * areaPerMeter;
+
+    const faceResults: SensitivityFaceResult[] = faceCounts.map((droneCount) => {
+      // 面積を droneCount 面ドローン / (4 - droneCount)面ロープ に分配
+      const totalFaces = 4;
+      const droneRatio = droneCount / totalFaces;
+      const ropeRatio = (totalFaces - droneCount) / totalFaces;
+      const droneArea = Math.round(totalArea * droneRatio);
+      const ropeArea = Math.round(totalArea * ropeRatio);
+
+      // 積み上げモードで計算
+      const stackupConfig: CostConfig = { ...config, salesPriceMode: "stackup" };
+      const scenario = calculateScenario("sens", "outsource", stackupConfig, droneArea, 0, ropeArea);
+
+      const ropeAccessPrice = totalArea * config.ropeAccessPricePerM2;
+      const ropeDiscountRate =
+        ropeAccessPrice > 0 ? ((ropeAccessPrice - scenario.stackupPrice) / ropeAccessPrice) * 100 : 0;
+
+      return {
+        droneCount,
+        droneArea,
+        ropeArea,
+        totalCost: scenario.costBreakdown.totalCost,
+        stackupPrice: scenario.stackupPrice,
+        grossProfit: scenario.grossProfit,
+        grossProfitRate: scenario.grossProfitRate,
+        sgaCost: scenario.sgaCost,
+        operatingProfit: scenario.operatingProfit,
+        operatingProfitRate: scenario.operatingProfitRate,
+        ropeAccessPrice,
+        ropeDiscountRate,
+        isViable: scenario.operatingProfit > 0,
+        headroom: scenario.stackupPrice - scenario.costBreakdown.totalCost,
+        impliedDroneUnit: scenario.impliedDroneUnitPrice,
+      };
+    });
+
+    return { height, totalArea, faceResults };
+  });
+
+  return { rows, faceCounts };
+}
+
+// --- Legacy Sensitivity Analysis (単価×シナリオ形式、後方互換) ---
 
 export interface SensitivityScenario {
   label: string;
@@ -326,408 +732,20 @@ export interface SensitivityResult {
   scenarios: string[];
 }
 
-// --- Feasibility Check ---
-
-export function checkFeasibility(building: BuildingInput): FeasibilityCheck {
-  const items: FeasibilityItem[] = [];
-
-  // Height check
-  if (building.height > 150) {
-    items.push({
-      level: "blocker",
-      message: `建物高さ ${building.height}m は飛行限界(150m)を超過しています`,
-    });
-  } else if (building.height > 100) {
-    items.push({
-      level: "warning",
-      message: `建物高さ ${building.height}m — 高高度飛行の許可申請が必要です`,
-    });
-  } else {
-    items.push({
-      level: "ok",
-      message: `建物高さ ${building.height}m — 標準飛行範囲内`,
-    });
-  }
-
-  // Accessible faces
-  const droneFaces = building.faces.filter(
-    (f) => f.accessLevel === "drone-possible"
-  );
-  const noDroneFaces = building.faces.filter(
-    (f) => f.accessLevel === "drone-impossible"
-  );
-
-  if (noDroneFaces.length > 0) {
-    const totalNoDrone = noDroneFaces.reduce((sum, f) => sum + f.area, 0);
-    if (droneFaces.length === 0) {
-      items.push({
-        level: "blocker",
-        message: "全面がドローンアクセス不可 — ロープアクセス等の代替手法が必要です",
-      });
-    } else {
-      items.push({
-        level: "warning",
-        message: `${noDroneFaces.map((f) => f.name).join("、")}がドローン不可（${totalNoDrone.toLocaleString()}m2）— ロープアクセス打診で対応`,
-      });
-    }
-  } else {
-    items.push({
-      level: "ok",
-      message: "全面ドローンアクセス可能",
-    });
-  }
-
-  // Line drone system note
-  if (droneFaces.length > 0) {
-    items.push({
-      level: "ok",
-      message: `${droneFaces.map((f) => f.name).join("、")}でラインドローンシステムによる調査が可能`,
-    });
-  }
-
-  // Obstacles
-  const facesWithObstacles = building.faces.filter(
-    (f) => f.obstacles.length > 0
-  );
-  if (facesWithObstacles.length > 0) {
-    items.push({
-      level: "warning",
-      message: `障害物あり: ${facesWithObstacles.map((f) => `${f.name}(${f.obstacles.join(",")})`).join("、")}`,
-    });
-  }
-
-  // Overall
-  const hasBlocker = items.some((i) => i.level === "blocker");
-  const hasWarning = items.some((i) => i.level === "warning");
-  const overall = hasBlocker ? "blocker" : hasWarning ? "warning" : "ok";
-
-  return { overall, items };
-}
-
-// --- Face pattern classification ---
-
-function classifyFacePattern(face: FaceInput): string {
-  if (face.accessLevel === "drone-possible" && face.inspectionMethod === "infrared") {
-    return "ラインドローンシステム＋赤外線";
-  }
-  if (face.accessLevel === "drone-impossible" && face.inspectionMethod === "percussion") {
-    return "ロープアクセス＋打診";
-  }
-  if (face.accessLevel === "drone-impossible" && face.inspectionMethod === "visual") {
-    return "目視検査";
-  }
-  if (face.groundIRPossible && face.groundIRArea > 0) {
-    return "地上赤外線";
-  }
-  const methodLabel = face.inspectionMethod === "infrared"
-    ? "赤外線"
-    : face.inspectionMethod === "percussion"
-    ? "打診"
-    : "目視";
-  const accessLabel = face.accessLevel === "drone-possible"
-    ? "ラインドローンシステム"
-    : "ロープアクセス";
-  return `${accessLabel}＋${methodLabel}`;
-}
-
-// --- Estimate Calculation ---
-
-function calculateScenario(
-  label: string,
-  irMode: "outsource" | "internal",
-  building: BuildingInput,
-  config: CostConfig,
-  surveyDays: number,
-  droneArea: number,
-  groundIRArea: number,
-  ropeAccessArea: number,
-): ScenarioResult {
-  // Personnel cost
-  const personnelCost = config.teamCostPerDay * surveyDays;
-
-  // Equipment cost (ラインドローンシステム使用を前提)
-  const dailyEquipment =
-    config.equipment.drone +
-    config.equipment.irCamera +
-    config.equipment.lineDroneSystem +
-    config.equipment.vehicle +
-    config.equipment.misc;
-  const equipmentCost = dailyEquipment * surveyDays;
-
-  // IR analysis cost (only for drone-inspectable area)
-  const totalIRArea = droneArea + groundIRArea;
-  const irRate =
-    irMode === "outsource"
-      ? config.irAnalysis.outsourceCostPerM2
-      : config.irAnalysis.internalCostPerM2;
-  const irAnalysisCost = totalIRArea * irRate;
-
-  // Transportation
-  const transportationCost = config.transportationPerDay * surveyDays;
-
-  // Rope access subcontract cost
-  const ropeAccessSubcontract = ropeAccessArea * config.ropeAccessPercussionPerM2;
-
-  // Totals
-  const directCost =
-    personnelCost + equipmentCost + irAnalysisCost + transportationCost + ropeAccessSubcontract;
-  const adminCost = Math.round(directCost * (config.adminRatePercent / 100));
-  const totalCost = directCost + adminCost;
-
-  const costBreakdown: CostBreakdown = {
-    personnel: personnelCost,
-    equipment: equipmentCost,
-    irAnalysis: irAnalysisCost,
-    transportation: transportationCost,
-    ropeAccessSubcontract,
-    directCost,
-    adminCost,
-    totalCost,
-  };
-
-  // Customer estimate breakdown
-  const droneIRArea = building.faces
-    .filter((f) => f.accessLevel === "drone-possible" && f.inspectionMethod === "infrared")
-    .reduce((sum, f) => sum + f.area - f.groundIRArea, 0);
-
-  const customerEstimate: CustomerEstimate = {
-    droneIRFee: droneIRArea * config.unitPricePerM2,
-    groundIRFee: groundIRArea * config.unitPricePerM2,
-    ropePercussionFee: ropeAccessArea * config.ropeAccessPricePerM2,
-    analysisFee: 0, // included in unit price
-    totalEstimate: 0,
-  };
-  customerEstimate.totalEstimate =
-    customerEstimate.droneIRFee +
-    customerEstimate.groundIRFee +
-    customerEstimate.ropePercussionFee;
-
-  const salesPrice = customerEstimate.totalEstimate;
-  const grossProfit = salesPrice - directCost;
-  const grossProfitRate = salesPrice > 0 ? (grossProfit / salesPrice) * 100 : 0;
-  const profit = salesPrice - totalCost;
-  const profitRate = salesPrice > 0 ? (profit / salesPrice) * 100 : 0;
-
-  const totalInspectArea = droneArea + groundIRArea + ropeAccessArea;
-  const perM2 = {
-    sales: totalInspectArea > 0 ? Math.round(salesPrice / totalInspectArea) : 0,
-    cost: totalInspectArea > 0 ? Math.round(totalCost / totalInspectArea) : 0,
-    profit: totalInspectArea > 0 ? Math.round(profit / totalInspectArea) : 0,
-  };
-
-  return {
-    label,
-    costBreakdown,
-    salesPrice,
-    customerEstimate,
-    grossProfit,
-    grossProfitRate,
-    profit,
-    profitRate,
-    perM2,
-  };
-}
-
-export interface FutureOverrides {
-  // 解析費
-  irAnalysisCostPerM2: number;
-  // 人件費（日額）
-  siteManagerCost: number;
-  pilotCost: number;
-  photographerCost: number;
-  assistantCost: number;
-  // 機材費（日額）
-  droneCost: number;
-  irCameraCost: number;
-  lineDroneSystemCost: number;
-  vehicleCost: number;
-  miscCost: number;
-  // その他
-  transportationPerDay: number;
-  ropeAccessPercussionPerM2: number;
-}
-
-export const DEFAULT_FUTURE_OVERRIDES: FutureOverrides = {
-  irAnalysisCostPerM2: DEFAULT_CONFIG.irAnalysis.internalCostPerM2, // 60（内製化）
-  siteManagerCost: DEFAULT_CONFIG.personnelDetail.siteManager,
-  pilotCost: 35000,                                                  // 自社雇用想定
-  photographerCost: DEFAULT_CONFIG.personnelDetail.photographer,
-  assistantCost: DEFAULT_CONFIG.personnelDetail.assistantOrTechB,
-  droneCost: 5000,                                                   // 自社保有（減価償却）
-  irCameraCost: 2000,                                                // 自社保有（減価償却）
-  lineDroneSystemCost: DEFAULT_CONFIG.equipment.lineDroneSystem,
-  vehicleCost: DEFAULT_CONFIG.equipment.vehicle,
-  miscCost: DEFAULT_CONFIG.equipment.misc,
-  transportationPerDay: DEFAULT_CONFIG.transportationPerDay,
-  ropeAccessPercussionPerM2: DEFAULT_CONFIG.ropeAccessPercussionPerM2,
-};
-
-export function applyFutureOverrides(config: CostConfig, overrides: FutureOverrides): CostConfig {
-  const c = JSON.parse(JSON.stringify(config)) as CostConfig;
-  c.personnelDetail = {
-    siteManager: overrides.siteManagerCost,
-    pilot: overrides.pilotCost,
-    photographer: overrides.photographerCost,
-    assistantOrTechB: overrides.assistantCost,
-  };
-  c.teamCostPerDay =
-    c.personnelDetail.siteManager +
-    c.personnelDetail.pilot +
-    c.personnelDetail.photographer +
-    c.personnelDetail.assistantOrTechB * 2;
-  c.equipment = {
-    drone: overrides.droneCost,
-    irCamera: overrides.irCameraCost,
-    lineDroneSystem: overrides.lineDroneSystemCost,
-    vehicle: overrides.vehicleCost,
-    misc: overrides.miscCost,
-  };
-  c.irAnalysis = { ...c.irAnalysis, outsourceCostPerM2: overrides.irAnalysisCostPerM2 };
-  c.transportationPerDay = overrides.transportationPerDay;
-  c.ropeAccessPercussionPerM2 = overrides.ropeAccessPercussionPerM2;
-  return c;
-}
-
-export function calculateEstimate(
-  building: BuildingInput,
-  config: CostConfig,
-  futureOverrides?: FutureOverrides
-): EstimateResult {
-  const feasibility = checkFeasibility(building);
-
-  // Face results
-  const faceResults: FaceResult[] = building.faces.map((face) => {
-    const isDrone = face.accessLevel === "drone-possible";
-    const clampedGroundIR = Math.min(face.groundIRArea, face.area);
-    const fDroneArea = isDrone ? face.area - clampedGroundIR : 0;
-    const fRopeArea =
-      face.accessLevel === "drone-impossible" ? Math.min(face.ropeAccessArea || face.area, face.area) : 0;
-
-    return {
-      name: face.name,
-      area: face.area,
-      accessLevel: face.accessLevel,
-      inspectionMethod: face.inspectionMethod,
-      note: face.note,
-      pattern: classifyFacePattern(face),
-      droneArea: Math.max(0, fDroneArea),
-      groundIRArea: clampedGroundIR,
-      ropeAccessArea: fRopeArea,
-    };
-  });
-
-  // Area breakdown
-  const droneArea = faceResults.reduce((s, f) => s + f.droneArea, 0);
-  const groundIRArea = faceResults.reduce((s, f) => s + f.groundIRArea, 0);
-  const ropeAccessArea = faceResults.reduce((s, f) => s + f.ropeAccessArea, 0);
-
-  // Survey days
-  const droneDays =
-    droneArea > 0 ? Math.ceil(droneArea / config.droneCapacityPerDay) : 0;
-  const groundIRDays =
-    groundIRArea > 0
-      ? Math.ceil(groundIRArea / config.groundIRCapacityPerDay)
-      : 0;
-  const surveyDays = Math.max(
-    droneDays,
-    groundIRDays,
-    droneArea + groundIRArea > 0 ? 1 : 0
-  );
-
-  // Two scenarios
-  const current = calculateScenario(
-    "現状（解析外注）",
-    "outsource",
-    building,
-    config,
-    surveyDays,
-    droneArea,
-    groundIRArea,
-    ropeAccessArea,
-  );
-
-  const ov = futureOverrides ?? DEFAULT_FUTURE_OVERRIDES;
-  const futureConfig = applyFutureOverrides(config, ov);
-  const future = calculateScenario(
-    "将来（自社化後）",
-    "outsource", // irAnalysis rate is baked into futureConfig.irAnalysis.outsourceCostPerM2
-    building,
-    futureConfig,
-    surveyDays,
-    droneArea,
-    groundIRArea,
-    ropeAccessArea,
-  );
-
-  // Comparison with full rope access
-  const totalArea = droneArea + groundIRArea + ropeAccessArea;
-  const ropeAccessPrice = totalArea * config.ropeAccessPricePerM2;
-  const dronePrice = current.salesPrice;
-  const savings = ropeAccessPrice - dronePrice;
-  const savingsPercent =
-    ropeAccessPrice > 0 ? (savings / ropeAccessPrice) * 100 : 0;
-
-  const comparison: ComparisonResult = {
-    dronePrice,
-    ropeAccessPrice,
-    savings,
-    savingsPercent,
-  };
-
-  return {
-    feasibility,
-    surveyDays,
-    faceResults,
-    droneArea,
-    groundIRArea,
-    ropeAccessArea,
-    current,
-    future,
-    comparison,
-  };
-}
-
-// --- Sensitivity Analysis ---
-
-function buildScenarioFaces(
-  originalFaces: FaceInput[],
-  droneCount: number
-): FaceInput[] {
-  // Separate ground-IR-only faces from regular faces
-  const groundIRFaces = originalFaces.filter(
-    (f) => f.groundIRPossible && f.groundIRArea >= f.area
-  );
-  const regularFaces = originalFaces.filter(
-    (f) => !(f.groundIRPossible && f.groundIRArea >= f.area)
-  );
-
-  // Sort regular faces: prioritize faces that were originally drone-possible
+function buildScenarioFaces(originalFaces: FaceInput[], droneCount: number): FaceInput[] {
+  const groundIRFaces = originalFaces.filter((f) => f.groundIRPossible && f.groundIRArea >= f.area);
+  const regularFaces = originalFaces.filter((f) => !(f.groundIRPossible && f.groundIRArea >= f.area));
   const sorted = [...regularFaces].sort((a, b) => {
-    const order: Record<AccessLevel, number> = {
-      "drone-possible": 0,
-      "drone-impossible": 1,
-    };
+    const order: Record<AccessLevel, number> = { "drone-possible": 0, "drone-impossible": 1 };
     return order[a.accessLevel] - order[b.accessLevel];
   });
-
   const scenarioFaces = sorted.map((face, i) => {
     if (i < droneCount) {
-      return {
-        ...face,
-        accessLevel: "drone-possible" as AccessLevel,
-        inspectionMethod: "infrared" as InspectionMethod,
-        ropeAccessArea: 0,
-      };
+      return { ...face, accessLevel: "drone-possible" as AccessLevel, inspectionMethod: "infrared" as InspectionMethod, ropeAccessArea: 0 };
     } else {
-      return {
-        ...face,
-        accessLevel: "drone-impossible" as AccessLevel,
-        inspectionMethod: "percussion" as InspectionMethod,
-        ropeAccessArea: face.area,
-      };
+      return { ...face, accessLevel: "drone-impossible" as AccessLevel, inspectionMethod: "percussion" as InspectionMethod, ropeAccessArea: face.area };
     }
   });
-
   return [...scenarioFaces, ...groundIRFaces];
 }
 
@@ -736,59 +754,36 @@ export function calculateSensitivity(
   config: CostConfig,
   priceRange: { min: number; max: number; step: number }
 ): SensitivityResult {
-  // Count regular (non-ground-IR) faces for scenario generation
-  const regularFaces = building.faces.filter(
-    (f) => !(f.groundIRPossible && f.groundIRArea >= f.area)
-  );
+  const regularFaces = building.faces.filter((f) => !(f.groundIRPossible && f.groundIRArea >= f.area));
   const regularCount = regularFaces.length;
 
-  // Define scenarios
   const scenarioDefs: { label: string; droneCount: number }[] = [
     { label: "全面ロープ", droneCount: 0 },
     { label: "1面ドローン", droneCount: 1 },
   ];
   if (regularCount >= 3) {
     scenarioDefs.push({ label: "3面ドローン", droneCount: 3 });
-  }
-  if (regularCount >= 2 && regularCount < 3) {
-    scenarioDefs.push({
-      label: `${regularCount}面ドローン`,
-      droneCount: regularCount,
-    });
+  } else if (regularCount >= 2) {
+    scenarioDefs.push({ label: `${regularCount}面ドローン`, droneCount: regularCount });
   }
 
   const rows: SensitivityRow[] = [];
-
-  for (
-    let price = priceRange.min;
-    price <= priceRange.max;
-    price += priceRange.step
-  ) {
+  for (let price = priceRange.min; price <= priceRange.max; price += priceRange.step) {
     const scenarioResults: SensitivityScenario[] = scenarioDefs.map((sd) => {
       const faces = buildScenarioFaces(building.faces, sd.droneCount);
-      const modifiedBuilding: BuildingInput = {
-        ...building,
-        faces,
-      };
-      const modifiedConfig: CostConfig = {
-        ...config,
-        unitPricePerM2: price,
-      };
+      const modifiedBuilding: BuildingInput = { ...building, faces };
+      const modifiedConfig: CostConfig = { ...config, salesPriceMode: "stackup", unitPriceDronePerM2: price };
       const est = calculateEstimate(modifiedBuilding, modifiedConfig);
       return {
         label: sd.label,
         salesPrice: est.current.salesPrice,
         totalCost: est.current.costBreakdown.totalCost,
-        profit: est.current.profit,
-        profitRate: est.current.profitRate,
+        profit: est.current.operatingProfit,
+        profitRate: est.current.operatingProfitRate,
       };
     });
-
     rows.push({ unitPrice: price, scenarios: scenarioResults });
   }
 
-  return {
-    rows,
-    scenarios: scenarioDefs.map((s) => s.label),
-  };
+  return { rows, scenarios: scenarioDefs.map((s) => s.label) };
 }
