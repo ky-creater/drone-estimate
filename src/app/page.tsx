@@ -585,6 +585,7 @@ function FutureRow({ label, unit, current, value, onChange }: {
   label: string; unit: string; current: number; value: number; onChange: (v: number) => void;
 }) {
   const changed = value !== current;
+  const diff = value - current;
   const diffPct = current > 0 ? Math.round((value / current) * 100) - 100 : 0;
   return (
     <div className="grid grid-cols-[1fr_5rem_5rem] items-center gap-2 text-sm">
@@ -596,8 +597,8 @@ function FutureRow({ label, unit, current, value, onChange }: {
             changed ? "border-green-400 bg-green-50 font-medium text-green-800" : "border-gray-200 bg-white"
           }`} />
         {changed && (
-          <span className={`text-xs tabular-nums ${diffPct < 0 ? "text-positive" : "text-negative"}`}>
-            {diffPct > 0 ? "+" : ""}{diffPct}%
+          <span className={`text-xs tabular-nums ${diff < 0 ? "text-positive" : "text-negative"}`}>
+            {diff > 0 ? "+" : ""}{diff.toLocaleString()} ({diffPct > 0 ? "+" : ""}{diffPct}%)
           </span>
         )}
       </div>
@@ -612,12 +613,24 @@ function SelfImprovementSection({ config, futureOverrides, onChange, onReset }: 
   onReset: () => void;
 }) {
   const set = (patch: Partial<FutureOverrides>) => onChange({ ...futureOverrides, ...patch });
+  const [resetMsg, setResetMsg] = useState(false);
+  const hasChanges = JSON.stringify(futureOverrides) !== JSON.stringify({
+    irAnalysisCostPerM2: config.irAnalysis.outsourceCostPerM2,
+    fixedPersonnelCostPerDay: config.fixedPersonnelCostPerDay,
+    uavFirstDay: config.equipment.uavFirstDay,
+    uavSubsequentPerDay: config.equipment.uavSubsequentPerDay,
+    vehiclePerDay: config.equipment.vehiclePerDay,
+    irCameraPerDay: config.equipment.irCameraPerDay,
+    miscPerDay: config.equipment.miscPerDay,
+    ropeAccessOutsourcePerM2: config.ropeAccessOutsourcePerM2,
+    reportFee: config.reportFee,
+  });
 
   return (
     <div className="space-y-3">
       <div className="bg-green-50 border border-green-200 rounded p-3 text-xs text-green-800">
         <p className="font-medium">この設定が「将来（自社化後）」シナリオに反映されます</p>
-        <p className="text-green-700 mt-0.5">右列で将来値を入力。変更分は色付きで表示されます。</p>
+        <p className="text-green-700 mt-0.5">右列で将来値を入力。変更分は数値と%で表示されます。</p>
       </div>
 
       <div className="space-y-1">
@@ -652,8 +665,14 @@ function SelfImprovementSection({ config, futureOverrides, onChange, onReset }: 
           value={futureOverrides.reportFee} onChange={(v) => set({ reportFee: v })} />
       </div>
 
-      <button onClick={onReset} className="w-full text-xs py-1 border border-border rounded text-text-muted hover:bg-gray-50">
-        デフォルトに戻す
+      <button
+        onClick={() => { onReset(); setResetMsg(true); setTimeout(() => setResetMsg(false), 1500); }}
+        disabled={!hasChanges}
+        className={`w-full text-xs py-1 border rounded transition-colors ${
+          hasChanges ? "border-border text-text-muted hover:bg-gray-50" : "border-gray-100 text-gray-300 cursor-not-allowed"
+        }`}
+      >
+        {resetMsg ? "リセットしました" : hasChanges ? "デフォルトに戻す" : "変更なし"}
       </button>
     </div>
   );
