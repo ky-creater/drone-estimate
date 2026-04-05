@@ -456,9 +456,13 @@ function ConfigEditor({ config, onChange, onReset }: { config: CostConfig; onCha
           </p>
         </div>
 
-        {/* 積み上げモード: ロープアクセス単価のみ調整 */}
+        {/* 積み上げモード */}
         {isStackup && (
           <div className="space-y-4">
+            <SliderField label="一般管理費等率（直接業務費に加算）" value={config.overheadRatePercent}
+              onChange={(v) => onChange({ ...config, overheadRatePercent: v })} min={20} max={60} step={0.1} unit="%" />
+            <SliderField label="販管費率（売上に対する目標営業利益計算用）" value={config.sgaRatePercent}
+              onChange={(v) => onChange({ ...config, sgaRatePercent: v })} min={10} max={50} step={0.1} unit="%" />
             <SliderField label="ロープアクセス 顧客単価（従来工法比較用）" value={config.ropeAccessPricePerM2}
               onChange={(v) => onChange({ ...config, ropeAccessPricePerM2: v })} min={300} max={800} step={10} unit="円/m2" />
           </div>
